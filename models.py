@@ -11,7 +11,10 @@ model_urls = {
 
 
 class VGG(nn.Module):
-
+    """
+      input_size  = 448 * 448
+      output_size = 7 * 7 * (5 * 2 + 16) = 1274
+    """
     def __init__(self, features, output_size=1274, image_size=448):
         super(VGG, self).__init__()
         self.features = features
@@ -36,16 +39,27 @@ class VGG(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
-
+# Using the configuration to make the layers
 def make_layers(cfg, batch_norm=False):
+    """
+    Args:
+        cfg: the sequence configuration with ints and chars.
+        batch_norm: provide batch normalization layer
+
+    Return:
+        nn.Sequential(*layers): the model sequence
+    """
     layers = []
     in_channels = 3
     s = 1
     first_flag=True
+
     for v in cfg:
-        s=1
-        if (v==64 and first_flag):
-            s=2
+        s = 1
+        
+        # Only the first_flag should set stride = 2
+        if (v == 64 and first_flag):
+            s = 2
             first_flag=False
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
@@ -55,7 +69,9 @@ def make_layers(cfg, batch_norm=False):
                 layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
             else:
                 layers += [conv2d, nn.ReLU(inplace=True)]
+            
             in_channels = v
+
     return nn.Sequential(*layers)
 
 def conv_bn_relu(in_channels,out_channels,kernel_size=3,stride=2,padding=1):
@@ -66,6 +82,9 @@ def conv_bn_relu(in_channels,out_channels,kernel_size=3,stride=2,padding=1):
     )
 
 
+# Configuration of VGG
+# number = the number of output channels of the conv layer
+#    "M" = MaxPooling Layer
 cfg = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
 }
@@ -74,28 +93,38 @@ cfg = {
 
 
 def Yolov1_vgg16bn(pretrained=False, **kwargs):
-    """VGG 16-layer model (configuration "D") with batch normalization
+    """
+    VGG 16-layer model (configuration "D") with batch normalization
+    
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
+            
+    Return:
+        yolo: the prediction model YOLO.
     """
+    
     yolo = VGG(make_layers(cfg['D'], batch_norm=True), **kwargs)
-    if pretrained:
-        vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
-        yolo_state_dict = yolo.state_dict()
-        for k in vgg_state_dict.keys():
-            if k in yolo_state_dict.keys() and k.startswith('features'):
-                yolo_state_dict[k] = vgg_state_dict[k]
+
+    vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
+    yolo_state_dict = yolo.state_dict()
+    for k in vgg_state_dict.keys():
+        if k in yolo_state_dict.keys() and k.startswith('features'):
+            yolo_state_dict[k] = vgg_state_dict[k]
+    
     yolo.load_state_dict(yolo_state_dict)
+    
     return yolo
 
 
 
 def test():
-    import torch
+    # import torch
     model = Yolov1_vgg16bn(pretrained=True)
+    # print(model)
+
     img = torch.rand(1,3,448,448)
-    output = model(img)
-    print(output.size())
+    # output = model(img)
+    # print(output.size())
 
 if __name__ == '__main__':
     test()

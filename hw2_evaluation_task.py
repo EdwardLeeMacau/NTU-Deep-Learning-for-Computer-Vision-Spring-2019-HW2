@@ -10,6 +10,7 @@
     search for PATH_TO_BE_CONFIGURED to config the paths
     Note, the evaluation is on the large scale images
 """
+
 import sys
 #import xml.etree.ElementTree as ET
 import os
@@ -43,6 +44,7 @@ def parse_gt(filename):
             #     object_struct['difficult'] = 1
             objects.append(object_struct)
     return objects
+
 def voc_ap(rec, prec, use_07_metric=False):
     """ ap = voc_ap(rec, prec, [use_07_metric])
     Compute VOC AP given precision and recall.
@@ -245,6 +247,13 @@ def readdet(detpath, imagenames, classnames):
     return output_det
 
 def main():
+    """ 
+      PredictionDir: hw2_train_val/val1500/labelTxt_hbb_pred/
+      AnnotationDir: hw2_train_val/val1500/labelTxt_hbb/
+    """
+    # detpath   = hw2_train_val/val1500/labelTxt_hbb_pred/
+    # annopath  = hw2_train_val/val1500/labelTxt_hbb/
+
     detpath = os.path.join(sys.argv[1], '{:s}.txt')
     annopath = os.path.join(sys.argv[2], '{:s}.txt')
     imagenames = [x.split('.')[0] for x in os.listdir(sys.argv[2]) if x.endswith('.txt')]
@@ -298,5 +307,6 @@ def main():
     print('map:', map)
     #classaps = 100*np.array(classaps)
     #print('classaps: ', classaps)
+
 if __name__ == '__main__':
     main()
