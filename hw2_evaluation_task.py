@@ -20,6 +20,7 @@ import numpy as np
 
 def parse_gt(filename):
     objects = []
+
     with open(filename, 'r') as f:
         lines = f.readlines()
         splitlines = [x.strip().split(' ')  for x in lines]
@@ -43,6 +44,7 @@ def parse_gt(filename):
             #     #print('area:', object_struct['area'])
             #     object_struct['difficult'] = 1
             objects.append(object_struct)
+            
     return objects
 
 def voc_ap(rec, prec, use_07_metric=False):
