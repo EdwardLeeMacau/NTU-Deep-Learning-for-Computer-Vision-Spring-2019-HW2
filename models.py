@@ -22,15 +22,37 @@ class VGG(nn.Module):
 
         self.yolo = nn.Sequential(
             #TODO
+            nn.Linear(25088, 4096), 
+            nn.Linear(4096, 1274)
         )
         self._initialize_weights()
 
     def forward(self, x):
+        """
+          input_size:    n * 3 * 448 * 448
+          VGG16_bn:      n * 512 * 7 * 7
+          Flatten Layer: n * 25088
+          Yolo Layer:    n * 1274
+          Sigmoid Layer: n * 1274
+          Reshape Layer: n * 26 * 7 * 7
+        """
+        # print(x.shape, x.dtype)
+        
         x = self.features(x)
+        # print(x.shape, x.dtype)
+        
         x = x.view(x.size(0), -1)
+        # print(x.shape, x.dtype)
+        
         x = self.yolo(x)
+        # print(x.shape, x.dtype)
+        
         x = torch.sigmoid(x) 
-        x = x.view(-1,7,7,26)
+        # print(x.shape, x.dtype)
+        
+        x = x.view(-1, 7, 7, 26)
+        # print(x.shape, x.dtype)
+        
         return x
 
     def _initialize_weights(self):
@@ -60,11 +82,14 @@ def make_layers(cfg, batch_norm=False):
         # Only the first_flag should set stride = 2
         if (v == 64 and first_flag):
             s = 2
-            first_flag=False
+            first_flag = False
+        
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+        
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, stride=s, padding=1)
+            
             if batch_norm:
                 layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
             else:
@@ -90,8 +115,6 @@ cfg = {
 }
 
 
-
-
 def Yolov1_vgg16bn(pretrained=False, **kwargs):
     """
     VGG 16-layer model (configuration "D") with batch normalization
@@ -102,7 +125,9 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
     Return:
         yolo: the prediction model YOLO.
     """
-    
+
+    # print(make_layers(cfg['D'], batch_norm=True))
+
     yolo = VGG(make_layers(cfg['D'], batch_norm=True), **kwargs)
 
     vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
@@ -118,13 +143,12 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
 
 
 def test():
-    # import torch
     model = Yolov1_vgg16bn(pretrained=True)
     # print(model)
 
-    img = torch.rand(1,3,448,448)
-    # output = model(img)
-    # print(output.size())
+    img = torch.rand(1, 3, 448, 448)
+    output = model(img)
+    print(output.size())
 
 if __name__ == '__main__':
     test()
