@@ -2,13 +2,13 @@ import torch.nn as nn
 import math
 import torch
 import torch.utils.model_zoo as model_zoo
-
+import torch.nn.functional as F
+import utils
 
 __all__ = ['vgg16_bn']
 model_urls = {
     'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
 }
-
 
 class VGG(nn.Module):
     """
@@ -60,6 +60,125 @@ class VGG(nn.Module):
             if isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+
+class YoloLoss(nn.Module):
+    def __init__(self, grid_num, bbox_num, lambda_coord, lambda_noobj):
+        super(YoloLoss, self).__init__()
+        self.grid_num = grid_num
+        self.bbox_num = bbox_num
+        self.lambda_coord = lambda_noobj
+        self.lambda_noobj = lambda_noobj
+
+    def IoU(self, tensor1, tensor2):
+        """
+        Args:
+          tensor1: [num_bbox, 10]
+          tensor2: [num_bbox, 10]
+        """
+
+        num_bbox = tensor1.shape[0]
+
+        intersectionArea = torch.zeros(num_bbox, 2)
+        left_top     = torch.zeros(num_bbox, 4)
+        right_bottom = torch.zeros(num_bbox, 4)
+
+        left_top[:, :2] = torch.max(
+            tensor1[:, :2],
+            tensor2[:, :2]
+        )
+        left_top[:, 2:] = torch.max(
+            tensor1[:, 5:7],
+            tensor2[:, 5:7]
+        )
+
+        right_bottom[:, :2] = torch.min(
+            tensor1[:, 2:4],
+            tensor2[:, 2:4]
+        )
+        right_bottom[:, 2:] = torch.min(
+            tensor1[:, 7:9],
+            tensor2[:, 7:9]
+        )
+
+        inter_wh = right_bottom - left_top
+        inter_wh[inter_wh < 0] = 0
+        intersectionArea[:, 0] = inter_wh[:, 0] * inter_wh[:, 1]
+        intersectionArea[:, 1] = inter_wh[:, 2] * inter_wh[:, 3]
+
+        area_1_1 = (tensor1[:, 2] - tensor1[:, 0]) * (tensor1[:, 3] - tensor1[:, 1])
+        area_1_2 = (tensor1[:, 7] - tensor1[:, 5]) * (tensor1[:, 8] - tensor1[:, 6])
+        area_1  = torch.cat((area_1_1, area_1_2), dim=1)
+        area_2_1 = (tensor2[:, 2] - tensor2[:, 0]) * (tensor2[:, 3] - tensor2[:, 1])
+        area_2_2 = (tensor2[:, 7] - tensor2[:, 5]) * (tensor2[:, 8] - tensor2[:, 6])
+        area_2  = torch.cat((area_2_1, area_2_2), dim=1)
+
+        iou = intersectionArea / (area_1 + area_2 - intersectionArea)
+
+        return iou
+        
+    def nonMaximumSuppression(self, boxes):
+        return
+
+    def forward(self, output: torch.tensor, target: torch.tensor):
+        """
+        Args:
+          output: [batchsize, 7, 7, 26]
+          target: [batchsize, 7, 7, 26]
+
+        Output:
+          loss
+        """
+        loss = 0
+        N = output.shape[0]
+
+        coord_mask = (target[:, :, :, 4] > 0).unsqueeze(-1).expand_as(target)
+        noobj_mask = (target[:, :, :, 4] == 0).unsqueeze(-1).expand_as(target)
+
+        coord_predict = output[coord_mask].view(-1, 26)
+        coord_target  = target[coord_mask].view(-1, 26)
+        noobj_predict = output[noobj_mask].view(-1, 26)
+        noobj_target  = output[noobj_mask].view(-1, 26)
+
+        """
+        boxes_predict = coord_predict[:, :10]
+        class_predict = coord_predict[:, 10:]
+
+        boxes_target  = target[:, :10]
+        class_target  = target[:, 10:]
+        """
+
+        # Compute the loss of not-containing object
+        noobj_predict_confidence = torch.cat((noobj_predict[:, 4], noobj_predict[:, 9]), dim=1)
+        noobj_target_confidence  = torch.cat((noobj_target[:, 4], noobj_target[:, 9]), dim=1)
+
+        loss += self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)
+
+        # Compute the loss of containing object
+        boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
+        boxes_target  = coord_target[:, 10]         # Match "delta_xy" in dataset.py
+        
+        boxes_predict_xy = torch.zeros(N, 10)
+        boxes_target_xy  = torch.zeros(N, 10)
+        boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / 7 - 0.5 * boxes_predict[:, 2:4]
+        boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / 7 + 0.5 * boxes_predict[:, 2:4]
+        boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / 7 - 0.5 * boxes_predict[:, 7:9]
+        boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / 7 + 0.5 * boxes_predict[:, 7:9]
+        boxes_predict_xy[:, 4], boxes_predict_xy[:, 9] = boxes_predict[:, 4], boxes_predict[:, 9]
+
+        boxes_target_xy[:,  :2] = boxes_target[:,  :2] / 7 - 0.5 * boxes_target[:, 2:4]
+        boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / 7 + 0.5 * boxes_target[:, 2:4]
+        boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / 7 - 0.5 * boxes_target[:, 7:9]
+        boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / 7 + 0.5 * boxes_target[:, 7:9]
+        boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
+        
+        iou = self.IoU(boxes_predict_xy, boxes_target_xy)
+        iou_max, index = iou.max(dim=1)
+        
+        raise NotImplementedError
+
+        iou_max_mask = None
+
+        return loss
 
 # Using the configuration to make the layers
 def make_layers(cfg, batch_norm=False):

@@ -83,6 +83,7 @@ def test(model, testdataloader: DataLoader, device):
                 test_loss, correct, len(testdataloader.dataset), 100. * correct / len(testdataloader.dataset)))
 
 def main():    
+    # Load dataset
     trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.ToTensor())
     testset  = dataset.MyDataset(root="hw2_train_val/test1500", size=1500, transform=transforms.ToTensor())
 
@@ -92,8 +93,10 @@ def main():
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True)
 
+    # Train the model
     model = train(model, trainset_loader, testset_loader, 5, device, log_interval=100, save_interval=500)
 
+    # Test the model
     test(model, testset_loader, device)
 
 if __name__ == "__main__":

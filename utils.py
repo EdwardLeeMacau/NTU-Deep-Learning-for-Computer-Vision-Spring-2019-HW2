@@ -6,47 +6,6 @@ class_Label = {}
 def imshow(img):
     np_Image = img.numpy()
     plt.imshow(np.transpose(np_Image, (1, 2, 0)))
-
-def labelToTensor(labels):
-    objects = []
-
-    """
-      object_struct = {
-          "name": ...
-          "difficult": ...
-          "bbox": ...
-      }
-    """
-    
-    # line.strip().split()
-
-    for label in labels:
-        object_struct = {}
-        object_struct['name'] = label[8]
-        
-        # if len(label) != 10: continue
-
-        if (len(label) == 9):
-            object_struct['difficult'] = 0
-        elif (len(label) == 10):
-            object_struct['difficult'] = int(label[9])
-
-        # prob = float(label[9])
-        
-        object_struct['bbox'] = [int(float(label[0])),
-                                 int(float(label[1])),
-                                 int(float(label[4])),
-                                 int(float(label[5]))]
-        
-        w = int(float(label[4])) - int(float(label[0]))
-        h = int(float(label[5])) - int(float(label[1]))
-        object_struct['area'] = w * h
-        
-        objects.append(object_struct)
-
-    raise NotImplementedError
-
-    return objects
    
 def tensorToLabel(tensors):
     raise NotImplementedError
