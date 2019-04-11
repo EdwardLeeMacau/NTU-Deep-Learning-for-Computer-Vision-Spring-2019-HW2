@@ -259,15 +259,13 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
     
     return yolo
 
-
-
-def test():
+def model_structure_unittest():
     model = Yolov1_vgg16bn(pretrained=True)
     # print(model)
 
-    img = torch.rand(1, 3, 448, 448)
-    output = model(img)
-    print(output.size())
+    # img = torch.rand(1, 3, 448, 448)
+    # output = model(img)
+    # print(output.size())
 
 if __name__ == '__main__':
-    test()
+    model_structure_unittest()

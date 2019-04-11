@@ -160,11 +160,11 @@ def dataset_unittest():
     train_iter = iter(trainset_loader)
 
     start = time.time()
-    for i in range(0, 20):
+    for i in range(0, 64):
         img, target = next(train_iter)
         # print("target: {}".format(target))
 
-    print(time.time() - start)
+    print("Using time: {}".format(time.time() - start))
 
 if __name__ == '__main__':
     dataset_unittest()
