@@ -77,6 +77,8 @@ class YoloLoss(nn.Module):
           tensor2: [num_bbox, 10]
         """
 
+        # print("Tensor1.shape: {}".format(tensor1.shape))
+
         num_bbox = tensor1.shape[0]
 
         intersectionArea = torch.zeros(num_bbox, 2)
@@ -108,10 +110,14 @@ class YoloLoss(nn.Module):
 
         area_1_1 = (tensor1[:, 2] - tensor1[:, 0]) * (tensor1[:, 3] - tensor1[:, 1])
         area_1_2 = (tensor1[:, 7] - tensor1[:, 5]) * (tensor1[:, 8] - tensor1[:, 6])
-        area_1  = torch.cat((area_1_1, area_1_2), dim=1)
+        # print("area_1_1.shape: {}".format(area_1_1.shape))
+        # print("area_1_2.shape: {}".format(area_1_2.shape))
+        area_1  = torch.cat((area_1_1.unsqueeze(1), area_1_2.unsqueeze(1)), dim=1)
+        # print("area_1.shape: {}".format(area_1.shape))
         area_2_1 = (tensor2[:, 2] - tensor2[:, 0]) * (tensor2[:, 3] - tensor2[:, 1])
         area_2_2 = (tensor2[:, 7] - tensor2[:, 5]) * (tensor2[:, 8] - tensor2[:, 6])
-        area_2  = torch.cat((area_2_1, area_2_2), dim=1)
+        area_2  = torch.cat((area_2_1.unsqueeze(1), area_2_2.unsqueeze(1)), dim=1)
+        # print("area_2.shape: {}".format(area_2.shape))
 
         iou = intersectionArea / (area_1 + area_2 - intersectionArea)
 
@@ -130,7 +136,7 @@ class YoloLoss(nn.Module):
           loss
         """
         loss = 0
-        N = output.shape[0]
+        batch_size = output.shape[0]
 
         coord_mask = (target[:, :, :, 4] > 0).unsqueeze(-1).expand_as(target)
         noobj_mask = (target[:, :, :, 4] == 0).unsqueeze(-1).expand_as(target)
@@ -158,8 +164,14 @@ class YoloLoss(nn.Module):
         boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
         boxes_target  = coord_target[:, :10]        # Match "delta_xy" in dataset.py
         
+        N = boxes_predict.shape[0]                  # N: the number of bbox predicted
+        # print("Number of boxes: {}".format(boxes_predict.shape))
+        # print("Number of boxes: {}".format(boxes_target.shape))
         boxes_predict_xy = torch.zeros(N, 10)
         boxes_target_xy  = torch.zeros(N, 10)
+        # print("Boxes_predict_xy.shape: {}".format(boxes_predict_xy.shape))
+        # print("Boxes_predict.shape: {}".format(boxes_predict.shape))
+
         boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / 7 - 0.5 * boxes_predict[:, 2:4]
         boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / 7 + 0.5 * boxes_predict[:, 2:4]
         boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / 7 - 0.5 * boxes_predict[:, 7:9]
@@ -173,14 +185,17 @@ class YoloLoss(nn.Module):
         boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
         
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
+        # print("IoU.shape: {}".format(iou.shape))
         iou_max, max_index = iou.max(dim=1)
-        
-        raise NotImplementedError
+        print("IoU_Max.shape: {}".format(iou_max.shape))
+        print("IoU_Max: {}".format(iou_max))
+        print("max_index.shape: {}".format(max_index.shape))
+        print("max_index: {}".format(max_index))
 
         coord_response_mask = torch.zeros_like(boxes_target)
-        coord_notresponse_mask = torch.zeros_like(boxes_target)
+        coord_not_response_mask = torch.zeros_like(boxes_target)
         coord_response_mask[max_index] = 1
-        coord_notresponse_mask[1 - max_index] = 1
+        coord_not_response_mask[1 - max_index] = 1
         
         boxes_target_iou = torch.zeros_like(boxes_target)
         boxes_target_iou[max_index] = iou_max
@@ -274,9 +289,14 @@ def model_structure_unittest():
     model = Yolov1_vgg16bn(pretrained=True)
     # print(model)
 
-    # img = torch.rand(1, 3, 448, 448)
-    # output = model(img)
+    img = torch.rand(1, 3, 448, 448)
+    output = model(img)
     # print(output.size())
+    criterion = YoloLoss(7, 2, 5, 0.5)
+    target = torch.rand(1, 7, 7, 26)
+    loss = criterion(output, target)
+
+    print(loss)
 
 if __name__ == '__main__':
     model_structure_unittest()
