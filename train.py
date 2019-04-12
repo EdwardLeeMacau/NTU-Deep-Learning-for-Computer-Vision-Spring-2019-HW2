@@ -47,6 +47,7 @@ def train(model, traindataloader, valdataloader, epochs, device, log_interval=10
     accuracy = []
     for epoch in range(epochs):
         for batch_idx, (data, target) in enumerate(traindataloader):
+            target = target.type(torch.cuda.FloatTensor)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -120,6 +121,7 @@ def train_test_unittest():
     test(model, testLoader, device)
 
 def main():
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
     trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor()
