@@ -128,12 +128,14 @@ class YoloLoss(nn.Module):
 
     def forward(self, output: torch.tensor, target: torch.tensor):
         """
+        Default using cuda speedup.
+
         Args:
           output: [batchsize, 7, 7, 26]
           target: [batchsize, 7, 7, 26]
 
         Output:
-          loss
+          loss: scalar
         """
         loss = 0
         batch_size = output.shape[0]
@@ -146,21 +148,13 @@ class YoloLoss(nn.Module):
         noobj_predict = output[noobj_mask].view(-1, 26)
         noobj_target  = output[noobj_mask].view(-1, 26)
 
-        """
-        boxes_predict = coord_predict[:, :10]
-        class_predict = coord_predict[:, 10:]
-
-        boxes_target  = target[:, :10]
-        class_target  = target[:, 10:]
-        """
-
-        # Compute the loss of not-containing object
+        # 1. Compute the loss of not-containing object
         noobj_predict_confidence = torch.cat((noobj_predict[:, 4], noobj_predict[:, 9]), dim=1)
         noobj_target_confidence  = torch.cat((noobj_target[:, 4], noobj_target[:, 9]), dim=1)
 
         loss += self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)
 
-        # Compute the loss of containing object
+        # 2. Compute the loss of containing object
         boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
         boxes_target  = coord_target[:, :10]        # Match "delta_xy" in dataset.py
         
@@ -186,23 +180,76 @@ class YoloLoss(nn.Module):
         
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
         # print("IoU.shape: {}".format(iou.shape))
+        # print("Iou: {}".format(iou))
         iou_max, max_index = iou.max(dim=1)
-        print("IoU_Max.shape: {}".format(iou_max.shape))
-        print("IoU_Max: {}".format(iou_max))
-        print("max_index.shape: {}".format(max_index.shape))
-        print("max_index: {}".format(max_index))
+        max_index = max_index.type(torch.ByteTensor)
+        min_index = max_index.le(0)
+        # print("IoU_Max.shape: {}".format(iou_max.shape))
+        # print("IoU_Max: {}".format(iou_max))
+        # print("max_index.shape: {}".format(max_index.shape))
+        # print("max_index: {}".format(max_index))
+        # print("max_index: {}".format(max_index.dtype))
 
-        coord_response_mask = torch.zeros_like(boxes_target)
-        coord_not_response_mask = torch.zeros_like(boxes_target)
-        coord_response_mask[max_index] = 1
-        coord_not_response_mask[1 - max_index] = 1
-        
-        boxes_target_iou = torch.zeros_like(boxes_target)
-        boxes_target_iou[max_index] = iou_max
-        boxes_target_iou = Variable(boxes_target_iou)
-        
-        # Compute the loss of class loss
-        loss += F.mse_loss(output[:, :, 10:], target[:, :, 10:], size_average=False)
+        # Response Mask: the mask that notes the box need to calculate position loss.
+        coord_response_mask = torch.zeros((iou_max.shape[0], 2), dtype=torch.uint8)
+        coord_response_mask[max_index, 1] = 1
+        coord_response_mask[min_index, 0] = 1
+        # coord_response_mask = coord_response_mask.view(-1, 2)
+        coord_response_mask = coord_response_mask.view(-1)
+        coord_not_response_mask = coord_response_mask.le(0)
+        # print("max_index: {}".format(max_index))
+        # coord_response_mask     = max_index
+
+        # coord_response_mask     = torch.zeros_like(boxes_target, dtype=torch.uint8)
+        # coord_not_response_mask = torch.zeros_like(boxes_target, dtype=torch.uint8)
+        # print("Test:")
+        # print(coord_response_mask[max_index])
+        # coord_response_mask[max_index] = 1
+        # coord_not_response_mask = coord_response_mask.le(0)     # Inverse the positive layer
+        # coord_not_response_mask[1 - max_index, :] = 1
+        # print("coord_response_mask.shape: {}".format(coord_response_mask.shape))
+        # print("coord_response_mask: {}".format(coord_response_mask))
+        # print("coord_not_response_mask.shape: {}".format(coord_not_response_mask.shape))
+        # print("coord_not_response_mask: {}".format(coord_not_response_mask))
+
+        # raise NotImplementedError
+
+        # coord_response_mask = coord_response_mask.view(-1)
+        # coord_not_response_mask = coord_response_mask.view(-1)
+
+        # Modify the Ground Truth
+        # For 2.1 response loss: the gt of the confidence is the IoU(predict, target)
+        # For 2.2 not response loss: the gt of the confidence is 0
+        boxes_target_iou = boxes_target.contiguous().view(-1, 5)
+        boxes_target_iou[coord_response_mask, 4]     = iou_max
+        boxes_target_iou[coord_not_response_mask, 4] = 0
+        # print("boxes_target_iou.shape: {}".format(boxes_target_iou.shape))
+        # print("boxes_target_iou: {}".format(boxes_target_iou))
+
+        boxes_predict_response = boxes_predict[coord_response_mask].view(-1, 5)
+        boxes_target_response  = boxes_target_iou[coord_response_mask]
+        # print("Boxes_predict_response.shape: {}".format(boxes_predict_response.shape))
+        # print("Boxes_target_response.shape: {}".format(boxes_predict_response.shape))
+        # print("Boxes_predict_response: {}".format(boxes_predict_response))
+        # print("Boxes_target_response: {}".format(boxes_target_response))
+        # boxes_target_response = boxes_target[coord_response_mask].view(-1, 5)
+
+        # 2.1 response loss(Confidence, width & height, centerxy)
+        loss += F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)
+        loss += self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)
+        loss += self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)
+
+        # 2.2 not response loss, set the gt of the confidence as 0
+        boxes_predict_not_response = boxes_predict[coord_not_response_mask].view(-1, 5)
+        boxes_target_not_response  = boxes_target_iou[coord_not_response_mask]
+        # boxes_target_not_response[:, 4] = 0
+        # boxes_target_not_response[:, 9] = 0
+
+        loss += self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)
+        # loss += self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 9], boxes_target_not_response[:, 9], size_average=False)
+
+        # 2.3 Compute the loss of class loss
+        loss += F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
 
         return loss
 
@@ -296,7 +343,7 @@ def model_structure_unittest():
     target = torch.rand(1, 7, 7, 26)
     loss = criterion(output, target)
 
-    print(loss)
+    print("Loss: {}".format(loss))
 
 if __name__ == '__main__':
     model_structure_unittest()
