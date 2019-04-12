@@ -144,12 +144,12 @@ class MyDataset(Dataset):
 
 def dataset_unittest():
     trainset = MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
-        # transforms.Resize((448, 448)), 
+        transforms.Resize((448, 448)), 
         transforms.ToTensor()
     ]))
 
     testset  = MyDataset(root="hw2_train_val/test1500", train=False, size=1500, transform=transforms.Compose([
-        # transforms.Resize((448, 448)),
+        transforms.Resize((448, 448)),
         transforms.ToTensor()
     ]))
 

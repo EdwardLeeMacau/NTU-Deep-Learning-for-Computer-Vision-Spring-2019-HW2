@@ -99,7 +99,7 @@ def train_test_unittest():
     ]))
 
     trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=args.worker)
-    testLoader  = DataLoader(testset, batch_size=1500, shuffle=False, num_workers=args.worker)
+    testLoader  = DataLoader(testset, batch_size=64, shuffle=False, num_workers=args.worker)
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)

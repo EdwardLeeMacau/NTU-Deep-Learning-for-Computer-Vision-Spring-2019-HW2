@@ -4,6 +4,7 @@ import torch
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 import utils
+from torch.autograd import Variable
 
 __all__ = ['vgg16_bn']
 model_urls = {
@@ -155,7 +156,7 @@ class YoloLoss(nn.Module):
 
         # Compute the loss of containing object
         boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
-        boxes_target  = coord_target[:, 10]         # Match "delta_xy" in dataset.py
+        boxes_target  = coord_target[:, :10]        # Match "delta_xy" in dataset.py
         
         boxes_predict_xy = torch.zeros(N, 10)
         boxes_target_xy  = torch.zeros(N, 10)
@@ -172,11 +173,21 @@ class YoloLoss(nn.Module):
         boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
         
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
-        iou_max, index = iou.max(dim=1)
+        iou_max, max_index = iou.max(dim=1)
         
         raise NotImplementedError
 
-        iou_max_mask = None
+        coord_response_mask = torch.zeros_like(boxes_target)
+        coord_notresponse_mask = torch.zeros_like(boxes_target)
+        coord_response_mask[max_index] = 1
+        coord_notresponse_mask[1 - max_index] = 1
+        
+        boxes_target_iou = torch.zeros_like(boxes_target)
+        boxes_target_iou[max_index] = iou_max
+        boxes_target_iou = Variable(boxes_target_iou)
+        
+        # Compute the loss of class loss
+        loss += F.mse_loss(output[:, :, 10:], target[:, :, 10:], size_average=False)
 
         return loss
 
