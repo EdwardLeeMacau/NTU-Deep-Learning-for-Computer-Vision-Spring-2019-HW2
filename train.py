@@ -39,10 +39,12 @@ def selectDevice(show=False):
 
 def train(model, traindataloader, valdataloader, epochs, device, log_interval=100, save_interval=500, save=True):
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    criterion = models.YoloLoss(7, 2, 5, 0.5)
+    criterion = models.YoloLoss(7, 2, 5, 0.5).to(device)
     model.train()
 
     iteration = 0
+    loss = []
+    accuracy = []
     for epoch in range(epochs):
         for batch_idx, (data, target) in enumerate(traindataloader):
             data, target = data.to(device), target.to(device)
@@ -62,10 +64,15 @@ def train(model, traindataloader, valdataloader, epochs, device, log_interval=10
 
             iteration += 1
 
-        test(model, valdataloader, device)
-    
+        loss, accuracy = test(model, valdataloader, device)
+
     if save_interval > 0:
         utils.saveCheckpoint("Yolov1-{}.pth".format(iteration), model, optimizer)
+
+    with open("Training_Record.txt", "w") as textfile:
+        textfile.write("\n".join(loss))
+        textfile.write("\n")
+        textfile.write("\n".join(accuracy))    
 
     return model
 
@@ -86,6 +93,8 @@ def test(model, testdataloader: DataLoader, device):
     test_loss /= len(testdataloader.dataset)
     logger.info("\n Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
                 test_loss, correct, len(testdataloader.dataset), 100. * correct / len(testdataloader.dataset)))
+
+    return test_loss, 100. * correct / len(testdataloader.dataset)
 
 def train_test_unittest():    
     # Load dataset
@@ -110,5 +119,25 @@ def train_test_unittest():
     # Test the model
     test(model, testLoader, device)
 
+def main():
+    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
+        transforms.Resize((448, 448)),
+        transforms.ToTensor()
+    ]))
+
+    testset  = dataset.MyDataset(root="hw2_train_val/test1500", size=1500, transform=transforms.Compose([
+        transforms.Resize((448, 448)),
+        transforms.ToTensor()
+    ]))
+
+    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=args.worker)
+    testLoader  = DataLoader(testset, batch_size=64, shuffle=False, num_workers=args.worker)
+
+    device = selectDevice(show=True)
+    model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
+
+    model = train(model, trainLoader, testLoader, 30, device, log_interval=10, save_interval=0)
+
 if __name__ == "__main__":
-    train_test_unittest()
+    # train_test_unittest()
+    main()
