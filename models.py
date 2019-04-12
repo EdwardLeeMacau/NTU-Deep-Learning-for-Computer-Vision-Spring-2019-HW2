@@ -63,12 +63,13 @@ class VGG(nn.Module):
                 m.bias.data.zero_()
 
 class YoloLoss(nn.Module):
-    def __init__(self, grid_num, bbox_num, lambda_coord, lambda_noobj):
+    def __init__(self, grid_num, bbox_num, lambda_coord, lambda_noobj, device):
         super(YoloLoss, self).__init__()
         self.grid_num = grid_num
         self.bbox_num = bbox_num
         self.lambda_coord = lambda_noobj
         self.lambda_noobj = lambda_noobj
+        self.device = device
 
     def IoU(self, tensor1, tensor2):
         """
@@ -81,9 +82,9 @@ class YoloLoss(nn.Module):
 
         num_bbox = tensor1.shape[0]
 
-        intersectionArea = torch.zeros(num_bbox, 2)
-        left_top     = torch.zeros(num_bbox, 4)
-        right_bottom = torch.zeros(num_bbox, 4)
+        intersectionArea = torch.zeros(num_bbox, 2).to(self.device)
+        left_top     = torch.zeros(num_bbox, 4).to(self.device)
+        right_bottom = torch.zeros(num_bbox, 4).to(self.device)
 
         left_top[:, :2] = torch.max(
             tensor1[:, :2],
@@ -103,7 +104,7 @@ class YoloLoss(nn.Module):
             tensor2[:, 7:9]
         )
 
-        inter_wh = right_bottom - left_top
+        inter_wh = (right_bottom - left_top).to(self.device)
         inter_wh[inter_wh < 0] = 0
         intersectionArea[:, 0] = inter_wh[:, 0] * inter_wh[:, 1]
         intersectionArea[:, 1] = inter_wh[:, 2] * inter_wh[:, 3]
@@ -112,11 +113,11 @@ class YoloLoss(nn.Module):
         area_1_2 = (tensor1[:, 7] - tensor1[:, 5]) * (tensor1[:, 8] - tensor1[:, 6])
         # print("area_1_1.shape: {}".format(area_1_1.shape))
         # print("area_1_2.shape: {}".format(area_1_2.shape))
-        area_1  = torch.cat((area_1_1.unsqueeze(1), area_1_2.unsqueeze(1)), dim=1)
+        area_1  = torch.cat((area_1_1.unsqueeze(1), area_1_2.unsqueeze(1)), dim=1).to(device)
         # print("area_1.shape: {}".format(area_1.shape))
         area_2_1 = (tensor2[:, 2] - tensor2[:, 0]) * (tensor2[:, 3] - tensor2[:, 1])
         area_2_2 = (tensor2[:, 7] - tensor2[:, 5]) * (tensor2[:, 8] - tensor2[:, 6])
-        area_2  = torch.cat((area_2_1.unsqueeze(1), area_2_2.unsqueeze(1)), dim=1)
+        area_2  = torch.cat((area_2_1.unsqueeze(1), area_2_2.unsqueeze(1)), dim=1).to(device)
         # print("area_2.shape: {}".format(area_2.shape))
 
         iou = intersectionArea / (area_1 + area_2 - intersectionArea)
@@ -149,8 +150,8 @@ class YoloLoss(nn.Module):
         noobj_target  = output[noobj_mask].view(-1, 26)
 
         # 1. Compute the loss of not-containing object
-        noobj_predict_confidence = torch.cat((noobj_predict[:, 4], noobj_predict[:, 9]), dim=1)
-        noobj_target_confidence  = torch.cat((noobj_target[:, 4], noobj_target[:, 9]), dim=1)
+        noobj_predict_confidence = torch.cat((noobj_predict[:, 4].unsqueeze(1), noobj_predict[:, 9].unsqueeze(1)), dim=1)
+        noobj_target_confidence  = torch.cat((noobj_target[:, 4].unsqueeze(1), noobj_target[:, 9].unsqueeze(1)), dim=1)
 
         loss += self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)
 
@@ -197,31 +198,16 @@ class YoloLoss(nn.Module):
         # coord_response_mask = coord_response_mask.view(-1, 2)
         coord_response_mask = coord_response_mask.view(-1)
         coord_not_response_mask = coord_response_mask.le(0)
-        # print("max_index: {}".format(max_index))
-        # coord_response_mask     = max_index
-
-        # coord_response_mask     = torch.zeros_like(boxes_target, dtype=torch.uint8)
-        # coord_not_response_mask = torch.zeros_like(boxes_target, dtype=torch.uint8)
-        # print("Test:")
-        # print(coord_response_mask[max_index])
-        # coord_response_mask[max_index] = 1
-        # coord_not_response_mask = coord_response_mask.le(0)     # Inverse the positive layer
-        # coord_not_response_mask[1 - max_index, :] = 1
         # print("coord_response_mask.shape: {}".format(coord_response_mask.shape))
         # print("coord_response_mask: {}".format(coord_response_mask))
         # print("coord_not_response_mask.shape: {}".format(coord_not_response_mask.shape))
         # print("coord_not_response_mask: {}".format(coord_not_response_mask))
 
-        # raise NotImplementedError
-
-        # coord_response_mask = coord_response_mask.view(-1)
-        # coord_not_response_mask = coord_response_mask.view(-1)
-
         # Modify the Ground Truth
         # For 2.1 response loss: the gt of the confidence is the IoU(predict, target)
         # For 2.2 not response loss: the gt of the confidence is 0
         boxes_target_iou = boxes_target.contiguous().view(-1, 5)
-        boxes_target_iou[coord_response_mask, 4]     = iou_max
+        boxes_target_iou[coord_response_mask, 4]     = iou_max.type(torch.DoubleTensor)
         boxes_target_iou[coord_not_response_mask, 4] = 0
         # print("boxes_target_iou.shape: {}".format(boxes_target_iou.shape))
         # print("boxes_target_iou: {}".format(boxes_target_iou))

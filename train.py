@@ -39,7 +39,7 @@ def selectDevice(show=False):
 
 def train(model, traindataloader, valdataloader, epochs, device, log_interval=100, save_interval=500, save=True):
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    criterion = models.YoloLoss(7, 2, 5, 0.5).to(device)
+    criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
     model.train()
 
     iteration = 0
