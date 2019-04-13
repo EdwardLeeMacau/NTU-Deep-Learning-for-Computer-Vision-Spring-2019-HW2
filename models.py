@@ -22,7 +22,6 @@ class VGG(nn.Module):
         self.image_size = image_size
 
         self.yolo = nn.Sequential(
-            #TODO
             nn.Linear(25088, 4096), 
             nn.Linear(4096, 1274)
         )
@@ -123,9 +122,6 @@ class YoloLoss(nn.Module):
         iou = intersectionArea / (area_1 + area_2 - intersectionArea)
 
         return iou
-        
-    def nonMaximumSuppression(self, boxes):
-        return
 
     def forward(self, output: torch.tensor, target: torch.tensor):
         """
@@ -162,8 +158,8 @@ class YoloLoss(nn.Module):
         N = boxes_predict.shape[0]                  # N: the number of bbox predicted
         # print("boxes_predict.shape: {}".format(boxes_predict.shape))
         # print("boxes_target.shape: {}".format(boxes_target.shape))
-        boxes_predict_xy = torch.zeros(N, 10)
-        boxes_target_xy  = torch.zeros(N, 10)
+        boxes_predict_xy = torch.zeros_like(boxes_predict)
+        boxes_target_xy  = torch.zeros_like(boxes_target)
         # print("Boxes_predict_xy.shape: {}".format(boxes_predict_xy.shape))
         # print("Boxes_predict.shape: {}".format(boxes_predict.shape))
 
@@ -240,6 +236,9 @@ class YoloLoss(nn.Module):
 
         # 2.3 Compute the loss of class loss
         loss += F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
+
+        # Output the loss
+        # loss /= batch_size
 
         return loss
 
@@ -323,14 +322,15 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
     return yolo
 
 def model_structure_unittest():
-    model = Yolov1_vgg16bn(pretrained=True)
-    # print(model)
-
-    img = torch.rand(1, 3, 448, 448)
+    device = utils.selectDevice(show=True)
+    model = Yolov1_vgg16bn(pretrained=True).to(device)
+    
+    img    = torch.rand(1, 3, 448, 448).to(device)
+    target = torch.rand(1, 7, 7, 26).to(device)
     output = model(img)
+    
     # print(output.size())
-    criterion = YoloLoss(7, 2, 5, 0.5)
-    target = torch.rand(1, 7, 7, 26)
+    criterion = YoloLoss(7, 2, 5, 0.5, device)
     loss = criterion(output, target)
 
     print("Loss: {}".format(loss))

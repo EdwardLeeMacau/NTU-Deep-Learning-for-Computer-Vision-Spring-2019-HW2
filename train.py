@@ -22,6 +22,7 @@ import skimage
 import models
 import utils
 import dataset
+import predict
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--worker", default=4, type=int)
@@ -37,16 +38,15 @@ def selectDevice(show=False):
 
     return device
 
-def train(model, traindataloader, valdataloader, epochs, device, log_interval=100, save_interval=500, save=True):
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, log_interval=100, save_interval=500, save=True):
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
     model.train()
 
     iteration = 0
     loss_list = []
-    accuracy_list = []
     for epoch in range(1, epochs + 1):
-        for batch_idx, (data, target) in enumerate(traindataloader):
+        for batch_idx, (data, target, _) in enumerate(train_dataloader):
             target = target.type(torch.cuda.FloatTensor)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
@@ -58,7 +58,7 @@ def train(model, traindataloader, valdataloader, epochs, device, log_interval=10
 
             if (iteration % log_interval == 0):
                 logger.info("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-                            epoch, batch_idx * len(data), len(traindataloader.dataset), 100. * batch_idx / len(traindataloader), loss.item()))
+                            epoch, batch_idx * len(data), len(train_dataloader.dataset), 100. * batch_idx / len(train_dataloader), loss.item()))
             
             # if save_interval > 0:
             #     if (iteration % save_interval == 0) and (iteration > 0):
@@ -67,67 +67,38 @@ def train(model, traindataloader, valdataloader, epochs, device, log_interval=10
 
             iteration += 1
 
-        test_loss = test(model, valdataloader, device)
+        test_loss, mean_average_precision = test(model, val_dataloader, device)
         loss_list.append(test_loss)
        
         if epoch % 3 == 0:
             utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
 
     with open("Training_Record.txt", "w") as textfile:
-        textfile.write("\n".join(loss))
-        textfile.write("\n")
-        textfile.write("\n".join(accuracy))    
+        textfile.write("\n".join(loss_list))
 
     return model
 
-def test(model, testdataloader: DataLoader, device):
+def test(model, dataloader: DataLoader, device):
     criterion = models.YoloLoss(7, 7, 5, 0.5, device).to(device)
     model.eval()
     test_loss = 0
-    # correct = 0
+    mean_average_precision = 0
 
     with torch.no_grad():
-        for data, target in testdataloader:
-            target = target.type(torch.cuda.FloatTensor)
+        for data, target, _ in dataloader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             test_loss += criterion(output, target).item()
-            # prediction = output.max(1, keepdim=True)
-            # print("Prediction.shape: {}".format(prediction.shape))
-            # print("Target.shape: {}".format(target.shape))
-            # correct += prediction.eq(target.view_as(prediction)).sum().item()
 
-    test_loss /= len(testdataloader.dataset)
-    # logger.info("\n Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
-    #             test_loss, correct, len(testdataloader.dataset), 100. * correct / len(testdataloader.dataset)))
-    logger.info("\n Test set: Average loss: {:.4f}\n".format(test_loss))
+    test_loss /= len(dataloader.dataset)
+    logger.info("*** Test set - Average loss: {:.4f} \n".format(test_loss))
+    logger.info("*** Test set - MAP: {:.4f} \n".format(mean_average_precision))
 
-    return test_loss
-
-def train_test_unittest():    
-    # Load dataset
-    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor()
-    ]))
-    testset  = dataset.MyDataset(root="hw2_train_val/test1500", size=1500, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor()
-    ]))
-
-    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=args.worker)
-    testLoader  = DataLoader(testset, batch_size=64, shuffle=False, num_workers=args.worker)
-
-    device = selectDevice(show=True)
-    model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-
-    # Train the model
-    model = train(model, trainLoader, testLoader, 1, device, log_interval=10, save_interval=0)
-
-    # Test the model
-    test(model, testLoader, device)
+    return test_loss, mean_average_precision
 
 def main():
+    start = time.time()
+
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
     trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
         transforms.Resize((448, 448)),
@@ -144,9 +115,19 @@ def main():
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
+    model  = train(model, trainLoader, testLoader, 30, device, lr=0.0001, log_interval=10, save_interval=0)
 
-    model = train(model, trainLoader, testLoader, 30, device, log_interval=10, save_interval=0)
+    end = time.time()
+    logger.info("*** Training ended.")
+    logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
+
+    # Try to generate the textfiles.
+    start = time.time()
+    for data, target, _ in testLoader:
+        textmsg = predict.predict(data, model)
+    end = time.time()
+    
+    logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
-    # train_test_unittest()
     main()

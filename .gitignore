@@ -2,5 +2,11 @@
 # IMPORTANT: make sure that your dataset is stored in a
 # folder with the same name as the one specified below!
 
-/hw2_train_val/*
+# Dataset
+./hw2_train_val/*
 
+# Log
+log.log
+
+# Cache File
+./__pycache__/

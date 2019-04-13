@@ -61,7 +61,7 @@ class MyDataset(Dataset):
         target   = self.label2target(labelName, image.size)
         if self.transform: image = self.transform(image)
 
-        return image, target
+        return image, target, labelName
 
     def encoder(self, boxes, classindex, image_size):
         """
@@ -156,15 +156,13 @@ def dataset_unittest():
     trainset_loader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=4)
     testset_loader  = DataLoader(testset, batch_size=1500, shuffle=False, num_workers=4)
     
-    # Make loader iterator
+    # Read data time testing
     train_iter = iter(trainset_loader)
 
     start = time.time()
-    for i in range(0, 64):
-        img, target = next(train_iter)
-        # print("target: {}".format(target))
-
-    print("Using time: {}".format(time.time() - start))
+    for i in range(0, 64):  img, target, _ = next(train_iter)
+    end = time.time()
+    print("Using time: {:.4f}".format(end - start))
 
 if __name__ == '__main__':
     dataset_unittest()
