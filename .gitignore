@@ -5,6 +5,9 @@
 # Dataset
 ./hw2_train_val/*
 
+# Model Parameter
+*.pth
+
 # Log
 log.log
 

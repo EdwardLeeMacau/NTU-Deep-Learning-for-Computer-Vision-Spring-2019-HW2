@@ -6,6 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 import glob
 import os
@@ -23,6 +24,7 @@ import models
 import utils
 import dataset
 import predict
+import evaluation
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--worker", default=4, type=int)
@@ -30,6 +32,16 @@ args = parser.parse_args()
 
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
+
+classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
+            'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
+            'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 
+            'harbor', 'swimming-pool', 'helicopter', 'container-crane']
+
+labelEncoder  = LabelEncoder()
+oneHotEncoder = OneHotEncoder(sparse=False)
+integerEncoded = labelEncoder.fit_transform(classnames)
+oneHotEncoded  = oneHotEncoder.fit_transform(integerEncoded.reshape(16, 1))
 
 def selectDevice(show=False):
     use_cuda = torch.cuda.is_available()
@@ -45,6 +57,7 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, lo
 
     iteration = 0
     loss_list = []
+    mean_aps  = []
     for epoch in range(1, epochs + 1):
         for batch_idx, (data, target, _) in enumerate(train_dataloader):
             target = target.type(torch.cuda.FloatTensor)
@@ -69,6 +82,7 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, lo
 
         test_loss, mean_average_precision = test(model, val_dataloader, device)
         loss_list.append(test_loss)
+        mean_aps.append(mean_average_precision)
        
         if epoch % 3 == 0:
             utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
@@ -89,6 +103,14 @@ def test(model, dataloader: DataLoader, device):
             data, target = data.to(device), target.to(device)
             output = model(data)
             test_loss += criterion(output, target).item()
+
+    # Calculate the map value
+    for data, target, labelNames in dataloader:
+        boxes, classIndexs, probs = predict.predict(data, model)
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
+        predict.export(boxes, classNames, labelNames)
+    
+    mean_average_precision = evaluation.main()
 
     test_loss /= len(dataloader.dataset)
     logger.info("*** Test set - Average loss: {:.4f} \n".format(test_loss))
@@ -115,7 +137,7 @@ def main():
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model  = train(model, trainLoader, testLoader, 30, device, lr=0.0001, log_interval=10, save_interval=0)
+    model  = train(model, trainLoader, testLoader, 30, device, lr=0.001, log_interval=10, save_interval=0)
 
     end = time.time()
     logger.info("*** Training ended.")
@@ -123,10 +145,11 @@ def main():
 
     # Try to generate the textfiles.
     start = time.time()
-    for data, target, _ in testLoader:
-        textmsg = predict.predict(data, model)
+    for data, target, labelNames in testLoader:
+        boxes, classIndexs, probs = predict.predict(data, model)
+        # predict.export(boxes, classNames, labelName)
     end = time.time()
-    
+
     logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":

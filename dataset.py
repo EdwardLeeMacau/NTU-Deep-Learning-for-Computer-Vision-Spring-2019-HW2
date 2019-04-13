@@ -28,8 +28,15 @@ class MyDataset(Dataset):
     integerEncoded = labelEncoder.fit_transform(classnames)
     oneHotEncoded  = oneHotEncoder.fit_transform(integerEncoded.reshape(16, 1))
 
-    def __init__(self, root, size, grid_num=7, bbox_num=2, class_num=16, train=True, transform=None):
-        """ Save the imageNames only but transfer the labels as the tensor. """
+    def __init__(self, root, size, difficulty=None, grid_num=7, bbox_num=2, class_num=16, train=True, transform=None):
+        """ 
+        Save the imageNames and the labelNames and read in future.
+
+        Args:
+            (...)
+        Return:
+            (...)
+        """
         self.filenames = []
         self.root      = root
         self.train     = train
@@ -37,6 +44,7 @@ class MyDataset(Dataset):
         self.grid_num  = grid_num
         self.bbox_num  = bbox_num
         self.class_num = class_num
+        # self.difficulty = difficulty
 
         numDigits = len(str(size))
         for i in range(0, size):
@@ -83,12 +91,7 @@ class MyDataset(Dataset):
        
         ij = (np.ceil(centerXY / cell_size) - 1).astype(int)
         i, j = ij[:, 0], ij[:, 1]
-        # print(i, j)
-        # print(i.shape, j.shape)
-        # print(target[j, :, :])
-        # print(target[j, i, 4])
-        # print(target[j, i, 4].shape)
-
+        
         # Confidence
         target[j, i, 4] = 1
         target[j, i, 9] = 1
@@ -102,44 +105,40 @@ class MyDataset(Dataset):
         target[j, i, 7:9] = wh
         target[j, i, 5:7] = deltaXY
 
-        # for index, cxcy_sample in enumerate(centerXY):
-        #     ij = torch.ceil(cxcy_sample / cell_size) - 1
-        #     # ij = (cxcy_sample / cell_size).ceil() - 1
-        #     i, j = int(ij[0]), int(ij[1])
-
-        #     # Confidence, class one-hot encoding
-        #     target[j, i, 4] = 1
-        #     target[j, i, 9] = 1
-            
-            
-            # Coordinate transform to xyhw
-        #     xy = ij * cell_size
-        #     delta_xy = (cxcy_sample - xy) / cell_size
-        #     target[j, i, 2:4] = wh[index]
-        #     target[j, i,  :2] = delta_xy
-        #     target[j, i, 7:9] = wh[index]
-        #     target[j, i, 5:7] = delta_xy
-
-        target = torch.from_numpy(target)
-
+        # target = torch.from_numpy(target)
         # print("target.shape: {}".format(target.shape))
 
         return target
 
     def label2target(self, labelName, image_size):
-        """ Transfer the labels to the tensor. """
+        """ 
+        Transfer the labels to the tensor. 
+
+        Args:
+          labelName: the label textfile to open
+          image_size: <tuple> the size to normalize 
+
+        Return:
+          target: [7 * 7 * 26]
+        """
         with open(labelName, "r") as textfile:
             labels = textfile.readlines()
+            labels = np.asarray("".join(labels).replace("\n", " ").strip().split()).reshape(-1, 10)
 
-            labels      = np.asarray("".join(labels).replace("\n", " ").strip().split()).reshape(-1, 10)
-            classNames  = np.asarray(labels[:, 8])
-            classIndexs = self.labelEncoder.transform(classNames)
-            
-            boxes = np.asarray(labels[:, :8]).astype(np.float)
-            boxes = np.concatenate((boxes[:, :2], boxes[:, 4:6]), axis=1)
+        classNames  = np.asarray(labels[:, 8])
+        classIndexs = self.labelEncoder.transform(classNames)
+        
+        boxes = np.asarray(labels[:, :8]).astype(np.float)
+        boxes = np.concatenate((boxes[:, :2], boxes[:, 4:6]), axis=1)
 
         target = self.encoder(boxes, classIndexs, image_size)
 
+        # if self.difficulty:
+        #     difficulties = np.asarray(labels[:, 9]).astype(np.int)
+        #     keep_index   = np.argswhere(difficulties == self.difficulty).reshape(-1)    # [N, 1] -> [N]
+        #     target = target[keep_index].reshape(-1, 10)                                 # [N, 10]
+
+        target = torch.from_numpy(target)
         return target
 
 def dataset_unittest():
@@ -160,7 +159,9 @@ def dataset_unittest():
     train_iter = iter(trainset_loader)
 
     start = time.time()
-    for i in range(0, 64):  img, target, _ = next(train_iter)
+    for i in range(0, 1):  
+        img, target, _ = next(train_iter)
+        print(img)
     end = time.time()
     print("Using time: {:.4f}".format(end - start))
 

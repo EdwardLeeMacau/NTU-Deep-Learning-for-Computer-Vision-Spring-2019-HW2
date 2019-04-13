@@ -237,8 +237,8 @@ class YoloLoss(nn.Module):
         # 2.3 Compute the loss of class loss
         loss += F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
 
-        # Output the loss
-        # loss /= batch_size
+        # Output the normalized loss
+        loss /= batch_size
 
         return loss
 
@@ -336,4 +336,6 @@ def model_structure_unittest():
     print("Loss: {}".format(loss))
 
 if __name__ == '__main__':
-    model_structure_unittest()
+    # model_structure_unittest()
+    model = Yolov1_vgg16bn(pretrained=True).to(device)
+    print(model)
