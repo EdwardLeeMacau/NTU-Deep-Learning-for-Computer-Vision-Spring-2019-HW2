@@ -214,7 +214,7 @@ class YoloLoss(nn.Module):
         # For 2.2 not response loss: the gt of the confidence is 0
         
         # boxes_target_iou = boxes_target.type(torch.cuda.FloatTensor).contiguous().view(-1, 5)
-        boxes_target_iou = boxes_target.contiguous().view(-1, 5)
+        boxes_target_iou = boxes_target.type(torch.float).contiguous().view(-1, 5)
         # print(boxes_target_iou.dtype)
         # print(iou_max.dtype)
         boxes_target_iou[coord_response_mask, 4]     = iou_max
