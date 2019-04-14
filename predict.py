@@ -26,8 +26,8 @@ logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, help="The model parameters file to read.", required=True)
-parser.add_argument("--output", type=str, default="hw2_train_val/val1500/labelTxt_hbb_pred", help="The path to save the labels.", required=True)
+# parser.add_argument("--model", type=str, help="The model parameters file to read.", required=True)
+# parser.add_argument("--output", type=str, default="hw2_train_val/val1500/labelTxt_hbb_pred", help="The path to save the labels.")
 parser.add_argument("--export", action="store_true", help="Store the results to the outputPath.")
 args = parser.parse_args()
 

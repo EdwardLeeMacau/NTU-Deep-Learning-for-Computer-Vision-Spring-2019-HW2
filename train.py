@@ -60,7 +60,7 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, lo
     mean_aps  = []
     for epoch in range(1, epochs + 1):
         for batch_idx, (data, target, _) in enumerate(train_dataloader):
-            target = target.type(torch.cuda.FloatTensor)
+            # target = target.type(torch.cuda.FloatTensor)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -110,7 +110,7 @@ def test(model, dataloader: DataLoader, device):
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
         predict.export(boxes, classNames, labelNames)
     
-    mean_average_precision = evaluation.main()
+    # mean_average_precision = evaluation.main()
 
     test_loss /= len(dataloader.dataset)
     logger.info("*** Test set - Average loss: {:.4f} \n".format(test_loss))

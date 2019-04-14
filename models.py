@@ -76,7 +76,8 @@ class YoloLoss(nn.Module):
           tensor1: [num_bbox, 10]
           tensor2: [num_bbox, 10]
         """
-
+        tensor1 = tensor1.type(torch.float)
+        tensor2 = tensor2.type(torch.float)
         # print("Tensor1.shape: {}".format(tensor1.shape))
 
         num_bbox = tensor1.shape[0]
@@ -154,7 +155,7 @@ class YoloLoss(nn.Module):
         noobj_predict_confidence = torch.cat((noobj_predict[:, 4].unsqueeze(1), noobj_predict[:, 9].unsqueeze(1)), dim=1)
         noobj_target_confidence  = torch.cat((noobj_target[:, 4].unsqueeze(1), noobj_target[:, 9].unsqueeze(1)), dim=1)
 
-        print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)))
+        # print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)))
         loss += self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)
 
         # 2. Compute the loss of containing object
@@ -182,7 +183,7 @@ class YoloLoss(nn.Module):
         boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
         
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
-        print("IoU: {}".format(iou))
+        # print("IoU: {}".format(iou))
         # print("IoU.shape: {}".format(iou.shape))
         # print("Iou: {}".format(iou))
         iou_max, max_index = iou.max(dim=1)
@@ -213,7 +214,7 @@ class YoloLoss(nn.Module):
         # For 2.2 not response loss: the gt of the confidence is 0
         
         # boxes_target_iou = boxes_target.type(torch.cuda.FloatTensor).contiguous().view(-1, 5)
-        boxes_target_iou = boxes_target.type(torch.FloatTensor).contiguous().view(-1, 5)
+        boxes_target_iou = boxes_target.contiguous().view(-1, 5)
         # print(boxes_target_iou.dtype)
         # print(iou_max.dtype)
         boxes_target_iou[coord_response_mask, 4]     = iou_max
@@ -230,9 +231,9 @@ class YoloLoss(nn.Module):
         # boxes_target_response = boxes_target[coord_response_mask].view(-1, 5)
 
         # 2.1 response loss(Confidence, width & height, centerxy)
-        print("obj_confidence_loss: {}".format(F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)))
-        print("coord_xy_loss: {}".format(self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)))
-        print("coord_hw_loss: {}".format(self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)))
+        # print("obj_confidence_loss: {}".format(F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)))
+        # print("coord_xy_loss: {}".format(self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)))
+        # print("coord_hw_loss: {}".format(self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)))
         loss += F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)
         loss += self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)
         loss += self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)
@@ -243,12 +244,12 @@ class YoloLoss(nn.Module):
         # boxes_target_not_response[:, 4] = 0
         # boxes_target_not_response[:, 9] = 0
 
-        print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)))
+        # print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)))
         loss += self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)
         # loss += self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 9], boxes_target_not_response[:, 9], size_average=False)
 
         # 2.3 Compute the loss of class loss
-        print("class_loss: {}".format(F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)))
+        # print("class_loss: {}".format(F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)))
         loss += F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
 
         # Output the normalized loss
