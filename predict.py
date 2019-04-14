@@ -62,16 +62,18 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
     output = output.squeeze(0) # [batch_size, 7, 7, 26]
     # print("Output.shape: {}".format(output.shape))
     # print("Output: {}".format(output))
-    
+
     contain1 = output[:, :, 4].unsqueeze(-1)
     contain2 = output[:, :, 9].unsqueeze(-1)
     # print("Contain1.shape: {}".format(contain1.shape))
     contain = torch.cat((contain1, contain2), -1)
     # print("Contain.shape: {}".format(contain.shape))
+    # print(contain[3, 3])
     
     mask1 = (contain > prob_min)
     mask2 = (contain == contain.max()) #we always select the best contain_prob what ever it>0.9
     mask  = (mask1 + mask2).gt(0)
+    # print(mask[3, 3])
     # print("Mask.shape: {}".format(mask.shape))
     
     # TODO: redifine xy: the coordinate of each cell's up-left corner  
@@ -81,12 +83,13 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
         for j in range(grid_num):
             for b in range(2):
                 if mask[i, j, b] == 1:
-                    box = output[i, j, b*5:b*5+4]
-                    contain_prob = torch.FloatTensor([output[i, j, b*5+4]])
+                    box = output[i, j, b * 5: b * 5 + 4]
+                    contain_prob = torch.FloatTensor([output[i, j, b * 5 + 4]])
                         
                     # Recover the base of xy as image_size
-
-                    xy = torch.cuda.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
+                    
+                    xy = torch.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
+                    # xy = torch.cuda.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
                         
                     # print("xy.shape: {}".format(xy.shape))
                     # print("xy: {}".format(xy))
@@ -95,16 +98,18 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
                     box_xy[:2] = box[:2] - 0.5 * box[2:]
                     box_xy[2:] = box[:2] + 0.5 * box[2:]                        
                     max_prob, classIndex = torch.max(output[i, j, 10:], 0)
+                    # print(classIndex)
+                    # print(output[i, j, 10 + classIndex])
 
                     # print("max_prob.shape: {}".format(max_prob.shape))
                     # print("max_prob: {}".format(max_prob))
 
+                    # print(float((contain_prob * max_prob)[0]))
                     if float((contain_prob * max_prob)[0]) > 0.1:
+                        classIndex = classIndex.unsqueeze(0)
                         boxes.append(box_xy.view(1, 4))
                         classIndexs.append(classIndex)
-                        probs.append(contain_prob*max_prob)
-
-    pdb.set_trace()
+                        probs.append(contain_prob * max_prob)
 
     if len(boxes) == 0:
         boxes = torch.zeros((1,4))
@@ -116,7 +121,6 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
         classIndexs = torch.cat(classIndexs, 0) #(n,)
     
     keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
-    pdb.set_trace()
 
     return boxes[keep_index], classIndexs[keep_index], probs[keep_index]
 
@@ -225,17 +229,42 @@ def predict(images: torch.Tensor, model):
     return boxes, classIndexs, probs
 """
 
-def export(boxes, classNames, probs, labelName):
+def export(boxes, classNames, probs, labelName, image_size=512.):
     """ Write one output file with the boxes and the classnames. """
-    with open(os.path.join("hw2_train_val/val1500/labelTxt_hbb_pred", labelNames.split("/")[-1]), "w") as textfile:
-        for i in range(0, boxes.shape[0]):
-            x1 = str(float(boxes[i][0]))
-            y1 = str(float(boxes[i][1]))
-            x2 = str(float(boxes[i][2]))
-            y2 = str(float(boxes[i][3]))
-            prob = str(round(float(boxes[i][9]), 3))
+    boxes = (boxes * image_size).round()
+    rect  = torch.zeros(boxes.shape[0], 8)
 
-            textfile.write(" ".join((x1, y1, x2, y1, x2, y2, x1, y2, classNames[i], prob)) + "\n")
+    # Extand (x1, y1, x2, y2) to (x1, y1, x2, y1, x2, y2, x1, y2)
+    rect[:,  :3] = boxes[:, :3]
+    rect[:, 4:6] = boxes[:, 2:]
+    rect[:, 3]   = boxes[:, 1]
+    rect[:, 6]   = boxes[:, 0]
+    rect[:, 7]   = boxes[:, 3]
+
+    # Return the probs to string lists
+    round_func = lambda x: round(x, 3)
+    probs = list(map(str, list(map(round_func, probs.data.tolist()))))
+    classNames = list(map(str, classNames))
+
+    with open(os.path.join("hw2_train_val/val1500/labelTxt_hbb_pred", labelNames.split("/")[-1]), "w") as textfile:
+        for i in range(0, rect.shape[0]):
+            prob = probs[i]
+            className = classNames[i]
+
+            textfile.write(" ".join(map(str, rect[i].data.tolist())) + " ")
+            textfile.write(" ".join((className, prob)) + "\n")
+
+def decode_unittest():
+    output = torch.zeros(1, 7, 7, 26)
+    target = torch.zeros_like(output)
+
+    obj   = torch.tensor([0.5, 0.5, 0.2, 0.8, 1])
+    classIndex = torch.tensor([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+    target[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
+    output[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
+
+    boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
+    classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
 
 def main():
     """
@@ -247,7 +276,8 @@ def main():
     """
     start = time.time()
 
-    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    torch.set_default_dtype(torch.float)
+    # torch.set_default_tensor_type(torch.cuda.FloatTensor)
     device = utils.selectDevice()
 
     model = models.Yolov1_vgg16bn(pretrained=True).to(device)
@@ -280,4 +310,6 @@ def main():
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
-    main()
+    decode_unittest()
+    
+    # main()

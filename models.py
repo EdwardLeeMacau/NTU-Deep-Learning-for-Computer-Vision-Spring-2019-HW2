@@ -66,7 +66,7 @@ class YoloLoss(nn.Module):
         super(YoloLoss, self).__init__()
         self.grid_num = grid_num
         self.bbox_num = bbox_num
-        self.lambda_coord = lambda_noobj
+        self.lambda_coord = lambda_coord
         self.lambda_noobj = lambda_noobj
         self.device = device
 
@@ -127,6 +127,10 @@ class YoloLoss(nn.Module):
         """
         Default using cuda speedup.
 
+        Assumptions:
+          1. the gt contain 1 object only
+          2. 
+
         Args:
           output: [batchsize, 7, 7, 26]
           target: [batchsize, 7, 7, 26]
@@ -137,6 +141,7 @@ class YoloLoss(nn.Module):
         loss = 0
         batch_size = output.shape[0]
 
+        # Assumption 1: the gt contain 1 object only
         coord_mask = (target[:, :, :, 4] > 0).unsqueeze(-1).expand_as(target)
         noobj_mask = (target[:, :, :, 4] == 0).unsqueeze(-1).expand_as(target)
 
@@ -149,6 +154,7 @@ class YoloLoss(nn.Module):
         noobj_predict_confidence = torch.cat((noobj_predict[:, 4].unsqueeze(1), noobj_predict[:, 9].unsqueeze(1)), dim=1)
         noobj_target_confidence  = torch.cat((noobj_target[:, 4].unsqueeze(1), noobj_target[:, 9].unsqueeze(1)), dim=1)
 
+        print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)))
         loss += self.lambda_noobj * F.mse_loss(noobj_predict_confidence, noobj_target_confidence, size_average=False)
 
         # 2. Compute the loss of containing object
@@ -176,6 +182,7 @@ class YoloLoss(nn.Module):
         boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
         
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
+        print("IoU: {}".format(iou))
         # print("IoU.shape: {}".format(iou.shape))
         # print("Iou: {}".format(iou))
         iou_max, max_index = iou.max(dim=1)
@@ -204,7 +211,9 @@ class YoloLoss(nn.Module):
         # Modify the Ground Truth
         # For 2.1 response loss: the gt of the confidence is the IoU(predict, target)
         # For 2.2 not response loss: the gt of the confidence is 0
-        boxes_target_iou = boxes_target.type(torch.cuda.FloatTensor).contiguous().view(-1, 5)
+        
+        # boxes_target_iou = boxes_target.type(torch.cuda.FloatTensor).contiguous().view(-1, 5)
+        boxes_target_iou = boxes_target.type(torch.FloatTensor).contiguous().view(-1, 5)
         # print(boxes_target_iou.dtype)
         # print(iou_max.dtype)
         boxes_target_iou[coord_response_mask, 4]     = iou_max
@@ -221,6 +230,9 @@ class YoloLoss(nn.Module):
         # boxes_target_response = boxes_target[coord_response_mask].view(-1, 5)
 
         # 2.1 response loss(Confidence, width & height, centerxy)
+        print("obj_confidence_loss: {}".format(F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)))
+        print("coord_xy_loss: {}".format(self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)))
+        print("coord_hw_loss: {}".format(self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)))
         loss += F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)
         loss += self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)
         loss += self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)
@@ -231,10 +243,12 @@ class YoloLoss(nn.Module):
         # boxes_target_not_response[:, 4] = 0
         # boxes_target_not_response[:, 9] = 0
 
+        print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)))
         loss += self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)
         # loss += self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 9], boxes_target_not_response[:, 9], size_average=False)
 
         # 2.3 Compute the loss of class loss
+        print("class_loss: {}".format(F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)))
         loss += F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
 
         # Output the normalized loss
@@ -335,7 +349,38 @@ def model_structure_unittest():
 
     print("Loss: {}".format(loss))
 
+def loss_function_unittest():
+    import math
+    torch.set_default_dtype(torch.float)
+    
+    output = torch.zeros(1, 7, 7, 26)
+    target = torch.zeros_like(output)
+
+    obj   = torch.tensor([0.5, 0.5, 0.5, 0.5, 1])
+    noobj = torch.tensor([0.5, 0.5, 0.5, 0.5, 0])
+    classIndex = torch.tensor([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
+    target[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
+
+    predict_obj = torch.tensor([0.5, 0.5, 1., 1., 0.5])
+    classIndex = torch.tensor([0.9, 0.1, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
+    output[:, 3, 3] = torch.cat((predict_obj, predict_obj, classIndex), dim=0)
+
+    criterion = YoloLoss(7, 2, 5, 0.5, "cpu")
+    loss = criterion(output, target)
+
+    print("*** loss_function_unittest: {}".format(loss.item()))
+    print("*** loss_function_ref:")
+    print("*** noobj_confidnce_loss: {}".format(0))
+    print("*** obj_confidence_loss: {}".format((0.5 - 0.25) ** 2))
+    print("*** coord_xy_loss: {}".format(0))
+    print("*** coord_hw_loss: {}".format(5 * 2 * (math.sqrt(0.5) - math.sqrt(1)) ** 2))
+    print("*** noobj_confidence_loss: {}".format(0.5 * (0.5 - 1) ** 2))
+    print("*** class_loss: {}".format(2* 0.1 ** 2))
+    
 if __name__ == '__main__':
     # model_structure_unittest()
-    model = Yolov1_vgg16bn(pretrained=True).to(device)
-    print(model)
+    
+    loss_function_unittest()
+
+    # model = Yolov1_vgg16bn(pretrained=True).to(device)
+    # print(model)
