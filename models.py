@@ -22,8 +22,13 @@ class VGG(nn.Module):
         self.image_size = image_size
 
         self.yolo = nn.Sequential(
-            nn.Linear(25088, 4096), 
-            nn.Linear(4096, 1274)
+            nn.Linear(25088, 4096),
+            nn.LeakyReLU(negative_slope=0.02),
+            nn.Dropout(0.5),
+
+            nn.Linear(4096, 1274),
+            nn.ReLU(),
+            nn.Dropout(0.5),
         )
         self._initialize_weights()
 
