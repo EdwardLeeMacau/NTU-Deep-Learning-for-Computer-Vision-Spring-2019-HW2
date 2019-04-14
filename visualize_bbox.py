@@ -60,10 +60,18 @@ def parse_det(detfile):
     
     return result 
 
-if __name__ == '__main__':
-    imgfile = sys.argv[1]
-    detfile = sys.argv[2]
+def scan_folder(img_folder, det_folder, out_folder, size):
+    length = len(size)
 
+    for i in range(0, size):
+        index = str(i).zfill(length)
+
+        imgfile = os.path.join(img_folder, index+".jpg")
+        detfile = os.path.join(det_folder, index+".txt")
+
+        visualize(imgfile, detfile, os.path.join(out_folder, index+".jpg"))
+
+def visualize(imgfile, detfile, outputfile):
     image = cv2.imread(imgfile)
     result = parse_det(detfile)
 
@@ -76,4 +84,18 @@ if __name__ == '__main__':
         cv2.rectangle(image, (p1[0] - 2//2, p1[1] - 2 - baseline), (p1[0] + text_size[0], p1[1] + text_size[1]), color, -1)
         cv2.putText(image, label, (p1[0], p1[1] + baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, 8)
 
-    cv2.imwrite('result.jpg',image)
+    cv2.imwrite(outputfile, image)
+
+def main():
+    """ Scan the whole folder. """
+    imgfile = sys.argv[1]
+    detfile = sys.argv[2]
+    outfile = sys.argv[3]
+    
+    if not os.path.exists(outfile):
+        os.mkdir(outfile)
+
+    scan_folder(imgfile, detfile, outfile, 1500)
+
+if __name__ == '__main__':
+    main()

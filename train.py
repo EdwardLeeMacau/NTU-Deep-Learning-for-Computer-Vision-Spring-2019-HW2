@@ -25,10 +25,7 @@ import utils
 import dataset
 import predict
 import evaluation
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--worker", default=4, type=int)
-args = parser.parse_args()
+import cmdparse
 
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
@@ -58,6 +55,7 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, lo
     iteration = 0
     loss_list = []
     mean_aps  = []
+
     for epoch in range(1, epochs + 1):
         for batch_idx, (data, target, _) in enumerate(train_dataloader):
             # target = target.type(torch.cuda.FloatTensor)
@@ -107,15 +105,16 @@ def test(model, dataloader: DataLoader, device):
     # Calculate the map value
     for data, target, labelNames in dataloader:
         boxes, classIndexs, probs = predict.predict(data, model)
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
         predict.export(boxes, classNames, labelNames)
     
-    # mean_average_precision = evaluation.main()
+    classaps, mean_ap = evaluation.scan_map()
 
-    test_loss /= len(dataloader.dataset)
-    logger.info("*** Test set - Average loss: {:.4f} \n".format(test_loss))
-    logger.info("*** Test set - MAP: {:.4f} \n".format(mean_average_precision))
-
+    # test_loss /= len(dataloader.dataset)
+    logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))
+    logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
+    logger.info("*** Test set - AP: {}".format(classaps))
+    
     return test_loss, mean_average_precision
 
 def main():
@@ -132,8 +131,8 @@ def main():
         transforms.ToTensor()
     ]))
 
-    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=args.worker)
-    testLoader  = DataLoader(testset, batch_size=64, shuffle=False, num_workers=args.worker)
+    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=cmdparse.args.worker)
+    testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=cmdparse.args.worker)
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
@@ -144,13 +143,13 @@ def main():
     logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
 
     # Try to generate the textfiles.
-    start = time.time()
-    for data, target, labelNames in testLoader:
-        boxes, classIndexs, probs = predict.predict(data, model)
-        # predict.export(boxes, classNames, labelName)
-    end = time.time()
+    # start = time.time()
+    # for data, target, labelNames in testLoader:
+    #    boxes, classIndexs, probs = predict.predict(data, model)
+    #     # predict.export(boxes, classNames, labelName)
+    # end = time.time()
 
-    logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
+    # logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
     main()

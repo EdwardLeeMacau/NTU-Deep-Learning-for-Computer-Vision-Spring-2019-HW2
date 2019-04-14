@@ -253,6 +253,41 @@ def readdet(detpath, imagenames, classnames):
 
     return output_det
 
+def scan_map(detpath="hw2_train_val/val1500/labelTxt_hbb_pred/", annopath="hw2_train_val/val1500/labelTxt_hbb/"):
+    imagenames = [x.split('.')[0] for x in os.listdir(annopath) if x.endswith('.txt')]
+    detpath = os.path.join(detpath, '{:s}.txt')
+    annopath = os.path.join(annopath, '{:s}.txt')
+    
+    classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
+                'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 'harbor', 'swimming-pool', 'helicopter', 'container-crane']
+
+    det = readdet(detpath, imagenames, classnames)
+    del_list = []
+    for key in det:
+        #print('%s: %d' % (key, len(det[key])))
+        if len(det[key]) == 0:
+            del_list.append(key)
+    #classnames = [x for x in classnames if x not in del_list]
+
+    classaps = []
+    map = 0
+    for classname in classnames:
+        print('classname:', classname)
+        rec, prec, ap = voc_eval(det[classname],
+                                annopath,
+                                imagenames,
+                                classname,
+                                ovthresh=0.5,
+                                use_07_metric=True)
+        map = map + ap
+        print('ap: ', ap)
+        classaps.append(ap)
+
+    map = map/len(classnames)
+    print('map:', map)
+
+    return classaps, map
+
 def main():
     """ 
       PredictionDir: hw2_train_val/val1500/labelTxt_hbb_pred/
@@ -263,8 +298,8 @@ def main():
     2. det = readdet(detpath, imagenames, classnames)
     3. Finish
     """
-    detpath    = "hw2_train_val/val1500/labelTxt_hbb_pred/"
-    annopath   = "hw2_train_val/val1500/labelTxt_hbb/"
+    detpath = os.path.join(sys.argv[1], '{:s}.txt')
+    annopath = os.path.join(sys.argv[2], '{:s}.txt')
     imagenames = [x.split('.')[0] for x in os.listdir(sys.argv[2]) if x.endswith('.txt')]
 
     classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
@@ -291,15 +326,6 @@ def main():
         # print('ap: ', ap)
         classaps.append(ap)
 
-        ## uncomment to plot p-r curve for each category
-        # plt.figure(figsize=(8,4))
-        # plt.xlabel('recall')
-        # plt.ylabel('precision')
-        # plt.plot(rec, prec)
-        # plt.show()
-    
-    # classaps = 100*np.array(classaps)
-    # print('classaps: ', classaps)
     map = map / len(classnames)
     print('map:', map)
     

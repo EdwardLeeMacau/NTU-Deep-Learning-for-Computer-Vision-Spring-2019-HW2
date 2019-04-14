@@ -21,15 +21,10 @@ import numpy as np
 import models
 from dataset import MyDataset
 import utils
+import cmdparse
 
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
-
-parser = argparse.ArgumentParser()
-# parser.add_argument("--model", type=str, help="The model parameters file to read.", required=True)
-# parser.add_argument("--output", type=str, default="hw2_train_val/val1500/labelTxt_hbb_pred", help="The path to save the labels.")
-parser.add_argument("--export", action="store_true", help="Store the results to the outputPath.")
-args = parser.parse_args()
 
 classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
             'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
@@ -229,7 +224,7 @@ def predict(images: torch.Tensor, model):
     return boxes, classIndexs, probs
 """
 
-def export(boxes, classNames, probs, labelName, image_size=512.):
+def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred", image_size=512.):
     """ Write one output file with the boxes and the classnames. """
     boxes = (boxes * image_size).round()
     rect  = torch.zeros(boxes.shape[0], 8)
@@ -246,7 +241,7 @@ def export(boxes, classNames, probs, labelName, image_size=512.):
     probs = list(map(str, list(map(round_func, probs.data.tolist()))))
     classNames = list(map(str, classNames))
 
-    with open(os.path.join("hw2_train_val/val1500/labelTxt_hbb_pred", labelNames.split("/")[-1]), "w") as textfile:
+    with open(os.path.join(outputpath, labelNames.split("/")[-1]), "w") as textfile:
         for i in range(0, rect.shape[0]):
             prob = probs[i]
             className = classNames[i]
@@ -264,7 +259,7 @@ def decode_unittest():
     output[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
 
     boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
-    classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
+    classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
 def main():
     """
@@ -277,12 +272,11 @@ def main():
     start = time.time()
 
     torch.set_default_dtype(torch.float)
-    # torch.set_default_tensor_type(torch.cuda.FloatTensor)
     device = utils.selectDevice()
 
     model = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model = utils.loadModel(args.model, model)
-    print("Read Model: {}".format(args.model))
+    model = utils.loadModel(cmdparse.args.model, model)
+    print("Read Model: {}".format(cmdparse.args.model))
     
     testset  = MyDataset(root="hw2_train_val/val1500", train=False, size=1500, transform=transforms.Compose([
         transforms.Resize((448, 448)),
@@ -292,8 +286,8 @@ def main():
     testset_loader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=4)
 
     # Return the imageName for storing the predict_msg
-    if not os.path.exists(args.output):
-        os.mkdir(args.output)
+    if not os.path.exists(cmdparse.args.output):
+        os.mkdir(cmdparse.args.output)
 
     for _, (data, target, labelName) in enumerate(testset_loader):
         data, target = data.to(device), target.to(device)
@@ -301,15 +295,15 @@ def main():
         output = model(data)
         boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
         
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
         # Write the output file
-        if args.export: export(boxes, classNames, probs, labelName[0])
+        if cmdparse.args.export: 
+            export(boxes, classNames, probs, labelName[0])
         
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
-    decode_unittest()
-    
-    # main()
+    # decode_unittest()
+    main()
