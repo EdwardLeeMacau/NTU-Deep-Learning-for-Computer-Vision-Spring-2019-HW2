@@ -15,6 +15,8 @@ import sys
 import os
 import numpy as np
 
+import utils
+
 def parse_gt(filename):
     objects = []
 
@@ -36,10 +38,6 @@ def parse_gt(filename):
             w = int(float(splitline[4])) - int(float(splitline[0]))
             h = int(float(splitline[5])) - int(float(splitline[1]))
             object_struct['area'] = w * h
-            #print('area:', object_struct['area'])
-            # if object_struct['area'] < (15 * 15):
-            #     #print('area:', object_struct['area'])
-            #     object_struct['difficult'] = 1
             objects.append(object_struct)
             
     return objects
@@ -258,8 +256,7 @@ def scan_map(detpath="hw2_train_val/val1500/labelTxt_hbb_pred/", annopath="hw2_t
     detpath = os.path.join(detpath, '{:s}.txt')
     annopath = os.path.join(annopath, '{:s}.txt')
     
-    classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
-                'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 'harbor', 'swimming-pool', 'helicopter', 'container-crane']
+    classnames = utils.classnames
 
     det = readdet(detpath, imagenames, classnames)
     del_list = []
@@ -298,14 +295,18 @@ def main():
     2. det = readdet(detpath, imagenames, classnames)
     3. Finish
     """
-    detpath = os.path.join(sys.argv[1], '{:s}.txt')
+
+    # detpath  = posixpath.join(sys.argv[1], '{:s}.txt')
+    # annopath = posixpath.join(sys.argv[2], '{:s}.txt')
+    
+    detpath  = os.path.join(sys.argv[1], '{:s}.txt')
     annopath = os.path.join(sys.argv[2], '{:s}.txt')
     imagenames = [x.split('.')[0] for x in os.listdir(sys.argv[2]) if x.endswith('.txt')]
 
-    classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
-                'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 'harbor', 'swimming-pool', 'helicopter', 'container-crane']
+    classnames = utils.classnames
 
     det = readdet(detpath, imagenames, classnames)
+    print("det: {}".format(det))
     del_list = []
     for key in det:
         if len(det[key]) == 0:

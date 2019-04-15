@@ -6,13 +6,10 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 import os
 import time
-import random 
-# import argparse
-import pdb
+import random
 import logging
 import logging.config
 from PIL import Image
@@ -27,15 +24,9 @@ import cmdparse
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
 
-classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
-            'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
-            'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 
-            'harbor', 'swimming-pool', 'helicopter', 'container-crane']
-
-labelEncoder  = LabelEncoder()
-oneHotEncoder = OneHotEncoder(sparse=False)
-integerEncoded = labelEncoder.fit_transform(classnames)
-oneHotEncoded  = oneHotEncoder.fit_transform(integerEncoded.reshape(16, 1))
+classnames = utils.classnames
+labelEncoder  = utils.labelEncoder
+oneHotEncoder = utils.oneHotEncoder
 
 def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2, class_num=16):
     """
@@ -70,9 +61,6 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
     mask  = (mask1 + mask2).gt(0)
     # print(mask[3, 3])
     # print("Mask.shape: {}".format(mask.shape))
-    
-    # TODO: redifine xy: the coordinate of each cell's up-left corner  
-    # TODO: redifine box_xy: [x1 y1 x2 y2] related to the image
 
     for i in range(grid_num):
         for j in range(grid_num):
@@ -109,7 +97,10 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
         boxes = torch.cat(boxes, 0) #(n,4)
         probs = torch.cat(probs, 0) #(n,)
         classIndexs = torch.cat(classIndexs, 0) #(n,)
-    
+
+    # Prevent the boxes go outside the image, so clamped the xy coordinate to 0-1
+    boxes = boxes.clamp(min=0., max=1.)
+
     # if random.random() < 0.01:
     #     print("*** Show random answer: ")
     #     print("*** Boxes: {}".format(boxes))
@@ -168,11 +159,12 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
 
         w = (xx2 - xx1).clamp(min=0)
         h = (yy2 - yy1).clamp(min=0)
-        inter = w*h
+        inter = w * h
 
         # print("IoU: {}".format(IoU(boxes[i], boxes[index[1: ]])))
         ovr = inter / (areas[i] + areas[index[1:]] - inter)
         # print("Ovr: {}".format(ovr))
+
         # Supress the bbox where overlap area > iou_threshold, return the remain index
         ids = (ovr <= iou_threshold).nonzero().squeeze()
         # print(ids)
@@ -187,46 +179,6 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
 
     return torch.tensor(keep_boxes, dtype=torch.long)
 
-def IoU(box: torch.Tensor, remains: torch.Tensor):
-    """
-    Calcuate the IoU of the specific bbox and other boxes.
-
-    Args:
-      box:     [5]
-      remains: [num_remain, 5]
-    
-    Return:
-      iou: [num_remain]
-    """
-
-    num_remain = remains.shape[0]
-    box = box.expand_as(num_remain)
-    
-    intersectionArea = torch.zeros(num_remain)
-    left_top     = torch.zeros(num_remain, 2)
-    right_bottom = torch.zeros(num_remain, 2)
-
-    left_top[:] = torch.max(
-        box[:, :2],
-        remains[:, :2]
-    )
-
-    right_bottom[:] = torch.min(
-        box[:, 2:4],
-        remains[:, 2:4]
-    )
-
-    inter_wh = right_bottom - left_top
-    inter_wh[inter_wh < 0] = 0
-    intersectionArea = inter_wh[:, 0] * inter_wh[:, 1]
-    
-    area_1 = (box[:, 2] - box[:, 0]) * (box[:, 3] - box[:, 1])
-    area_2 = (remains[:, 2] - remains[:, 0]) * (remains[:, 3] - remains[:, 1])
-    
-    iou = intersectionArea / (area_1 + area_2 - intersectionArea)
-
-    return iou
-
 """
 def predict(images: torch.Tensor, model):
     output = model(images)
@@ -235,7 +187,7 @@ def predict(images: torch.Tensor, model):
     return boxes, classIndexs, probs
 """
 
-def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred", image_size=512.):
+def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred", image_size=512., write=True):
     """ Write one output file with the boxes and the classnames. """
     boxes = (boxes * image_size).round()
     # print("Boxes: {}".format(boxes))
@@ -253,13 +205,18 @@ def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val150
     probs = list(map(str, list(map(round_func, probs.data.tolist()))))
     classNames = list(map(str, classNames))
 
-    with open(os.path.join(outputpath, labelName.split("/")[-1]), "w") as textfile:
-        for i in range(0, rect.shape[0]):
-            prob = probs[i]
-            className = classNames[i]
+    if not write:
+        return rect, classNames, probs
 
-            textfile.write(" ".join(map(str, rect[i].data.tolist())) + " ")
-            textfile.write(" ".join((className, prob)) + "\n")
+    else:
+        with open(os.path.join(outputpath, labelName.split("/")[-1]), "w") as textfile:
+            for i in range(0, rect.shape[0]):
+                prob = probs[i]
+                className = classNames[i]
+
+                textfile.write(" ".join(map(str, rect[i].data.tolist())) + " ")
+                textfile.write(" ".join((className, prob)) + "\n")
+        return 
 
 def decode_unittest():
     output = torch.zeros(1, 7, 7, 26)
@@ -270,8 +227,20 @@ def decode_unittest():
     target[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
     output[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
 
-    boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
+    boxes, classIndexs, probs = decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2)
     classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+
+def encoder_unittest():
+    indexs = labelEncoder.transform(classnames)
+    onehot = oneHotEncoder.transform(indexs)
+    reverse_index = oneHotEncoder.inverse_transform(onehot)
+    reverse_classnames = labelEncoder.inverse_transform(classnames)
+
+    print("*** classnames: \n{}".format(classnames))
+    print("*** indexs: \n{}".format(indexs))
+    print("*** onehot: \n{}".format(onehot))
+    print("*** reverse index: \n{}".format(reverse_index))
+    print("*** reverse classnames: \n{}".format(reverse_classnames))
 
 def main():
     """
@@ -280,6 +249,9 @@ def main():
     2.  Predict form tensors
         2.1 Supress the bbox that doesn't contain object (by prob_min)
         2.2 Execute NMS (by nonMaximumSupression)
+        3.3 Return the bbox, classnames and probs
+    3.  Output File if needed.
+    4.  MAP calculation. 
     """
     os.system("clear")
     start = time.time()
@@ -317,14 +289,15 @@ def main():
         data, target = data.to(device), target.to(device)
         
         output = model(data)
-        boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
+        boxes, classIndexs, probs = decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2)
         
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
         # Write the output file
         if cmdparse.args.export: 
-            export(boxes, classNames, probs, labelName[0])
-            # logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
+            export(boxes, classNames, probs, labelName[0], write=True)
+        if not cmdparse.args.export:
+            rect, classNames, probs = export(boxes, classNames, probs, "", write=False)
 
     # Trainset prediction
     """
@@ -347,4 +320,5 @@ def main():
 
 if __name__ == "__main__":
     # decode_unittest()
-    main()
+    encoder_unittest()
+    # main()

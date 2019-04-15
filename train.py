@@ -30,15 +30,9 @@ import cmdparse
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
 
-classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
-            'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
-            'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 
-            'harbor', 'swimming-pool', 'helicopter', 'container-crane']
-
-labelEncoder  = LabelEncoder()
-oneHotEncoder = OneHotEncoder(sparse=False)
-integerEncoded = labelEncoder.fit_transform(classnames)
-oneHotEncoded  = oneHotEncoder.fit_transform(integerEncoded.reshape(16, 1))
+classnames    = utils.classnames
+labelEncoder  = utils.labelEncoder
+oneHotEncoder = utils.oneHotEncoder
 
 def selectDevice(show=False):
     use_cuda = torch.cuda.is_available()
@@ -64,7 +58,7 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
 
             logger.info("Learning rate adjusted to: {}".format(lr))
 
-        if epoch == 40:
+        if epoch == 25:
             lr = lr * 0.1
         
             for param_group in optimizer.param_groups:
@@ -104,14 +98,14 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
             utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
 
     with open("Training_Record.txt", "w") as textfile:
-        textfile.write("Loss_list: {}".format(str(loss_list)))
+        textfile.write("Loss: {}".format(str(loss_list)))
         textfile.write("\n")
         textfile.write("Mean_aps: {}".format(str(mean_aps)))
 
     return model
 
 def test(model, dataloader: DataLoader, device, epochs):
-    criterion = models.YoloLoss(7, 7, 5, 0.5, device).to(device)
+    criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
     model.eval()
     test_loss = 0
     mean_average_precision = 0
@@ -161,7 +155,7 @@ def main():
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model  = train(model, trainLoader, testLoader, 50, device, lr=0.001, log_interval=10, save_interval=0)
+    model  = train(model, trainLoader, testLoader, 30, device, lr=0.001, log_interval=10, save_interval=0)
 
     end = time.time()
     logger.info("*** Training ended.")

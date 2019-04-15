@@ -7,9 +7,7 @@ import utils
 from torch.autograd import Variable
 
 __all__ = ['vgg16_bn']
-model_urls = {
-    'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
-}
+model_urls = {'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',}
 
 class VGG(nn.Module):
     """
