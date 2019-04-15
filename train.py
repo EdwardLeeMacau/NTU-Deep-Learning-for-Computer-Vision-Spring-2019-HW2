@@ -47,7 +47,7 @@ def selectDevice(show=False):
 
     return device
 
-def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, log_interval=100, save_interval=500, save=True):
+def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log_interval=100, save_interval=500, save=True):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
     model.train()
@@ -57,6 +57,21 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, lo
     mean_aps  = []
 
     for epoch in range(1, epochs + 1):
+        if epoch == 20:
+            lr = lr * 0.1
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
+
+            logger.info("Learning rate adjusted to: {}".format(lr))
+
+        if epoch == 40:
+            lr = lr * 0.1
+        
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
+
+            logger.info("Learning rate adjusted to: {}".format(lr))
+
         for batch_idx, (data, target, _) in enumerate(train_dataloader):
             # target = target.type(torch.cuda.FloatTensor)
             data, target = data.to(device), target.to(device)
@@ -78,19 +93,24 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.0001, lo
 
             iteration += 1
 
-        test_loss, mean_average_precision = test(model, val_dataloader, device)
+        test_loss, mean_ap = test(model, val_dataloader, device, epoch)
         loss_list.append(test_loss)
-        mean_aps.append(mean_average_precision)
-       
-        if epoch % 3 == 0:
+        mean_aps.append(mean_ap)
+        
+        if (epoch >= 40):
+            if (epoch % 2 == 0):
+                utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
+        elif (epoch >= 20) and (epoch % 5 == 0):
             utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
 
     with open("Training_Record.txt", "w") as textfile:
-        textfile.write("\n".join(loss_list))
+        textfile.write("Loss_list: {}".format(str(loss_list)))
+        textfile.write("\n")
+        textfile.write("Mean_aps: {}".format(str(mean_aps)))
 
     return model
 
-def test(model, dataloader: DataLoader, device):
+def test(model, dataloader: DataLoader, device, epochs):
     criterion = models.YoloLoss(7, 7, 5, 0.5, device).to(device)
     model.eval()
     test_loss = 0
@@ -102,18 +122,23 @@ def test(model, dataloader: DataLoader, device):
             output = model(data)
             test_loss += criterion(output, target).item()
 
-    # Calculate the map value
-    for data, target, labelNames in dataloader:
-        boxes, classIndexs, probs = predict.predict(data, model)
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-        predict.export(boxes, classNames, probs, labelNames, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
-        
-    classaps, mean_ap = evaluation.scan_map()
-
-    # test_loss /= len(dataloader.dataset)
+    test_loss /= len(dataloader.dataset)
     logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))
-    logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
-    logger.info("*** Test set - AP: {}".format(classaps))
+
+    # Calculate the map value
+    if epochs > 20:
+        for data, target, labelNames in dataloader:
+            data = data.to(device)
+            output = model(data)
+
+            boxes, classIndexs, probs = predict.decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
+            classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+            predict.export(boxes, classNames, probs, labelNames[0], outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
+        
+        classaps, mean_ap = evaluation.scan_map()
+
+        logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
+        logger.info("*** Test set - AP: {}".format(classaps))
     
     return test_loss, mean_average_precision
 
@@ -136,7 +161,7 @@ def main():
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model  = train(model, trainLoader, testLoader, 30, device, lr=0.0001, log_interval=10, save_interval=0)
+    model  = train(model, trainLoader, testLoader, 50, device, lr=0.001, log_interval=10, save_interval=0)
 
     end = time.time()
     logger.info("*** Training ended.")

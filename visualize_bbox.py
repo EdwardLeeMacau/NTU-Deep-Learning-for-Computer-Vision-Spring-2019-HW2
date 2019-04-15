@@ -90,14 +90,16 @@ def visualize(imgfile, detfile, outputfile):
 
 def main():
     """ Scan the whole folder. """
-    imgfile = sys.argv[1]
-    detfile = sys.argv[2]
-    outfile = sys.argv[3]
+    rootpath = sys.argv[1]
+    number   = int(sys.argv[2])
+    imgfile = os.path.join(rootpath, "images")
+    detfile = os.path.join(rootpath, "labelTxt_hbb_pred")
+    outfile = os.path.join(rootpath, "images_pred")
     
     if not os.path.exists(outfile):
         os.mkdir(outfile)
 
-    scan_folder(imgfile, detfile, outfile, 15000)
+    scan_folder(imgfile, detfile, outfile, number)
 
 if __name__ == '__main__':
     main()

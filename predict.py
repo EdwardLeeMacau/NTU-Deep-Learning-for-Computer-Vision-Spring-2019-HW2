@@ -66,7 +66,7 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
     # print(contain[3, 3])
     
     mask1 = (contain > prob_min)
-    mask2 = (contain == contain.max()) #we always select the best contain_prob what ever it>0.9
+    mask2 = (contain == contain.max())
     mask  = (mask1 + mask2).gt(0)
     # print(mask[3, 3])
     # print("Mask.shape: {}".format(mask.shape))
@@ -80,7 +80,6 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
                 if mask[i, j, b] == 1:
                     box = output[i, j, b * 5: b * 5 + 4]
                     contain_prob = output[i, j, b*5+4].type(torch.float)
-                    # contain_prob = torch.FloatTensor([output[i, j, b * 5 + 4]])
                         
                     # Recover the base of xy as image_size
                     xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
@@ -111,11 +110,11 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
         probs = torch.cat(probs, 0) #(n,)
         classIndexs = torch.cat(classIndexs, 0) #(n,)
     
-    if random.random() < 0.1:
-        print("*** Show random answer: ")
-        print("*** Boxes: {}".format(boxes))
-        print("*** Probs: {}".format(probs))
-        print("*** ClassIndex: {}".format(classIndexs))
+    # if random.random() < 0.01:
+    #     print("*** Show random answer: ")
+    #     print("*** Boxes: {}".format(boxes))
+    #     print("*** Probs: {}".format(probs))
+    #     print("*** ClassIndex: {}".format(classIndexs))
 
     keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
 
@@ -239,6 +238,7 @@ def predict(images: torch.Tensor, model):
 def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred", image_size=512.):
     """ Write one output file with the boxes and the classnames. """
     boxes = (boxes * image_size).round()
+    # print("Boxes: {}".format(boxes))
     rect  = torch.zeros(boxes.shape[0], 8)
 
     # Extand (x1, y1, x2, y2) to (x1, y1, x2, y1, x2, y2, x1, y2)
@@ -289,6 +289,7 @@ def main():
 
     model = models.Yolov1_vgg16bn(pretrained=True).to(device)
     model = utils.loadModel(cmdparse.args.model, model)
+    model.eval()
     print("Read Model: {}".format(cmdparse.args.model))
     
     trainset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
@@ -323,7 +324,7 @@ def main():
         # Write the output file
         if cmdparse.args.export: 
             export(boxes, classNames, probs, labelName[0])
-            logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
+            # logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
 
     # Trainset prediction
     """
