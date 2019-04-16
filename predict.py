@@ -62,13 +62,13 @@ def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bb
 
     for i in range(grid_num):
         for j in range(grid_num):
-            for b in range(2):
+            for b in range(bbox_num):
                 if mask[i, j, b] == 1:
                     box = output[i, j, b*5: b*5+4].type(torch.float)
                     contain_prob = output[i, j, b*5+4].type(torch.float)
                         
                     # Recover the base of xy as image_size
-                    xy = torch.tensor([j, i], dtype=torch.float).unsqueeze(0) * cell_size
+                    xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
 
                     box[:2] = box[:2] * cell_size + xy
                     box_xy  = torch.zeros(box.size(), dtype=torch.float)
@@ -233,9 +233,6 @@ def system_unittest():
             print(" ".join((className, prob)))
 
         pdb.set_trace()
-
-        
-
 
 def main():
     """

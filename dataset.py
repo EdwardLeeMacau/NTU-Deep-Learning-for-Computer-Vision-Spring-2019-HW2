@@ -54,9 +54,9 @@ class MyDataset(Dataset):
         boxes, classIndexs = self.readtxt(labelName)
         
         if self.train:
-            # image = self.RandomAdjustHSV(image, 0.8, 1.2)
+            image = self.RandomAdjustHSV(image, 0.9, 1.1)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
-            # if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
+            if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
 
         target = self.encoder(boxes, classIndexs, image.size)
         target = torch.from_numpy(target)
@@ -124,22 +124,40 @@ class MyDataset(Dataset):
 
         return boxes, classIndexs
 
-    def RandomAdjustHSV(self, img, min_f, max_f):
-        if random.random() < 0.5:
+    """
+    def RandomAdjustHSV(self, img, min_f, max_f, prob=0.5):
+        if random.random() < prob:
             factor = random.uniform(min_f, max_f)
             img = ImageEnhance.Color(img).enhance(factor)            
         
-        if random.random() < 0.5:
+        if random.random() < prob:
             factor = random.uniform(min_f, max_f)
             img = ImageEnhance.Brightness(img).enhance(factor)
         
-        if random.random() < 0.5:
+        if random.random() < prob:
             factor = random.uniform(min_f, max_f)
             img = ImageEnhance.Contrast(img).enhance(factor)
 
-        if random.random() < 0.5:
+        if random.random() < prob:
             factor = random.uniform(min_f, max_f)
             img = ImageEnhance.Sharpness(img).enhance(factor)
+
+        return img
+    """
+
+    def RandomAdjustHSV(self, img, min_f, max_f, prob=0.5):
+        if random.random() < prob:
+            factor = random.uniform(min_f, max_f)
+            choice = random.randint(0, 3)
+            
+            if choice == 0:
+                img = ImageEnhance.Color(img).enhance(factor)            
+            elif choice == 1:
+                img = ImageEnhance.Brightness(img).enhance(factor)
+            elif choice == 2:
+                img = ImageEnhance.Contrast(img).enhance(factor)
+            elif choice == 3:
+                img = ImageEnhance.Sharpness(img).enhance(factor)
 
         return img
 

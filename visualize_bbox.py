@@ -5,8 +5,10 @@
 
 import sys
 import os
+import argparse
 
 import cv2
+from PIL import Image
 import numpy as np
 
 DOTA_CLASSES = (  # always index 0
@@ -64,7 +66,7 @@ def scan_folder(img_folder, det_folder, out_folder, size):
     """ scan the folder and make all photo with grids. """
     length = len(str(size))
 
-    for i in range(0, size):
+    for i in range(1, size + 1):
         if (i % 100) == 0:  print(i)
         index = str(i).zfill(length)
 
@@ -90,16 +92,72 @@ def visualize(imgfile, detfile, outputfile):
 
 def main():
     """ Scan the whole folder. """
-    rootpath = sys.argv[1]
-    number   = int(sys.argv[2])
-    imgfile = os.path.join(rootpath, "images")
-    detfile = os.path.join(rootpath, "labelTxt_hbb_pred")
-    outfile = os.path.join(rootpath, "images_pred")
+    imgfile = os.path.join(args.root, "images")
+    detfile = os.path.join(args.root, "labelTxt_hbb_pred")
+    outfile = os.path.join(args.root, "images_pred")
     
     if not os.path.exists(outfile):
         os.mkdir(outfile)
 
-    scan_folder(imgfile, detfile, outfile, number)
+    scan_folder(imgfile, detfile, outfile, args.number)
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=str, default="./hw2_train_val/val1500", help="The root folder of the img/det. ")
+    parser.add_argument("--number", type=int, default=1500)
+    subparsers = parser.add_subparsers(required=True, dest="command")
+
+    compare_parser = subparsers.add_parser("compare")
+    drawdet_parser = subparsers.add_parser("drawdet")
+
+    args = parser.parse_args()
+
+    if args.command == "drawdet":
+        main()
+    elif args.command == "compare":
+        outputfolder = os.path.join(args.root, "image_pred")
+
+        detfolder = os.path.join(args.root, "labelTxt_hbb_pred")
+        txtnames = [ x.split(".")[0] for x in sorted(os.listdir(detfolder)) ]
+        
+        for img_det_name in txtnames:
+            imgfile = os.path.join(args.root, "images", img_det_name+'.jpg')
+            detfile = os.path.join(args.root, "labelTxt_hbb_pred", img_det_name+'.txt')
+            GTfile  = os.path.join(args.root, "labelTxt_hbb", img_det_name+'.txt')
+
+            image = cv2.imread(imgfile)
+            gt_image = cv2.imread(imgfile)
+            
+            result = parse_det(detfile) # [(x1, y1), (x2, y2), cls, prob]
+            for left_up, right_bottom, class_name, prob in result:
+                color = Color[DATA_CLASSES.index(class_name)]
+                cv2.rectangle(image,left_up,right_bottom,color,2)
+                label = class_name + str(round(prob,2))
+                text_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+                p1 = (left_up[0], left_up[1]- text_size[1])
+                cv2.rectangle(image, (p1[0] - 2//2, p1[1] - 2 - baseline), (p1[0] + text_size[0], p1[1] + text_size[1]), color, -1)
+                cv2.putText(image, label, (p1[0], p1[1] + baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, 8)
+
+            gt_img = parse_det(GTfile)
+            for left_up, right_bottom, class_name, prob in gt_img:
+                color = Color[DATA_CLASSES.index(class_name)]
+                cv2.rectangle(gt_image,left_up,right_bottom,color,2)
+                label = class_name+str(round(prob,2))
+                text_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+                p1 = (left_up[0], left_up[1]- text_size[1])
+                cv2.rectangle(gt_image, (p1[0] - 2//2, p1[1] - 2 - baseline), (p1[0] + text_size[0], p1[1] + text_size[1]), color, -1)
+                cv2.putText(gt_image, label, (p1[0], p1[1] + baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, 8)
+            
+            pad = np.zeros((512, 20, 3))
+            pad[:,:,:] = 255
+            pad = pad.astype(np.uint8)
+
+            final_pad = cv2.hconcat((image, pad))
+            final = cv2.hconcat((final_pad, gt_image))
+
+            cv2.imwrite(os.path.join(outputfolder, img_det_name+'_merge.jpg'), image)
+            
+            # Show the images
+            # cv2.imshow('Inference_GT.jpg', final)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()

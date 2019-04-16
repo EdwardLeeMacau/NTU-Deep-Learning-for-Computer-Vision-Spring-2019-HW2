@@ -180,16 +180,16 @@ class YoloLoss(nn.Module):
         boxes_predict_xy = torch.zeros_like(boxes_predict)
         boxes_target_xy  = torch.zeros_like(boxes_target)
         
-        boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / 7 - 0.5 * boxes_predict[:, 2:4]
-        boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / 7 + 0.5 * boxes_predict[:, 2:4]
-        boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / 7 - 0.5 * boxes_predict[:, 7:9]
-        boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / 7 + 0.5 * boxes_predict[:, 7:9]
+        boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / self.bbox_num - 0.5 * boxes_predict[:, 2:4]
+        boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / self.bbox_num + 0.5 * boxes_predict[:, 2:4]
+        boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / self.bbox_num - 0.5 * boxes_predict[:, 7:9]
+        boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / self.bbox_num + 0.5 * boxes_predict[:, 7:9]
         boxes_predict_xy[:, 4], boxes_predict_xy[:, 9] = boxes_predict[:, 4], boxes_predict[:, 9]
 
-        boxes_target_xy[:,  :2] = boxes_target[:,  :2] / 7 - 0.5 * boxes_target[:, 2:4]
-        boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / 7 + 0.5 * boxes_target[:, 2:4]
-        boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / 7 - 0.5 * boxes_target[:, 7:9]
-        boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / 7 + 0.5 * boxes_target[:, 7:9]
+        boxes_target_xy[:,  :2] = boxes_target[:,  :2] / self.bbox_num - 0.5 * boxes_target[:, 2:4]
+        boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / self.bbox_num + 0.5 * boxes_target[:, 2:4]
+        boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / self.bbox_num - 0.5 * boxes_target[:, 7:9]
+        boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / self.bbox_num + 0.5 * boxes_target[:, 7:9]
         boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
         
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
@@ -260,7 +260,7 @@ class VGG_improve(nn.Module):
       output_size = 14 * 14 * (5 * 2 + 16) = 1274
     """
     def __init__(self, features, output_size=1274, image_size=448):
-        super(VGG, self).__init__()
+        super(VGG_improve, self).__init__()
         self.features = features
         self.image_size = image_size
 
