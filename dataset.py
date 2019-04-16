@@ -52,9 +52,7 @@ class MyDataset(Dataset):
         
         image = Image.open(imageName)
         boxes, classIndexs = self.readtxt(labelName)
-        print("Read boxes: {}".format(boxes))
-        print("Read ClassIndex: {}".format(classIndexs))
-
+        
         if self.train:
             # image = self.RandomAdjustHSV(image, 0.8, 1.2)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)

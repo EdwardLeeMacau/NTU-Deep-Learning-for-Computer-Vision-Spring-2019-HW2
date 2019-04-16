@@ -64,7 +64,7 @@ def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bb
         for j in range(grid_num):
             for b in range(2):
                 if mask[i, j, b] == 1:
-                    box = output[i, j, b*5: b*5+4]
+                    box = output[i, j, b*5: b*5+4].type(torch.float)
                     contain_prob = output[i, j, b*5+4].type(torch.float)
                         
                     # Recover the base of xy as image_size
@@ -204,7 +204,7 @@ def system_unittest():
         transforms.ToTensor()
     ]))
 
-    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
     
     # Testset prediction
     for _, target, labelName in loader:
@@ -212,7 +212,7 @@ def system_unittest():
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
         
         print("Raw Data: ")
-        with open(labelName, "r") as textfile:
+        with open(labelName[0], "r") as textfile:
             content = textfile.readlines()
             print("\n".join(content))
 
@@ -229,8 +229,8 @@ def system_unittest():
         for i in range(0, rect.shape[0]):
             prob = probs[i]
             className = classNames[i]
-            print(" ".join(map(str, rect[i].data.tolist())) + " ")
-            print(" ".join((className, prob)) + "\n")
+            print(" ".join(map(str, rect[i].data.tolist())), end=" ")
+            print(" ".join((className, prob)))
 
         pdb.set_trace()
 
