@@ -2,19 +2,15 @@ import os
 import sys
 import os.path
 import time
-
 import random
-import numpy as np
 
+import numpy as np
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-import PIL.Image as Image
+from PIL import Image, ImageEnhance, ImageFilter
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-# import skimage
-# import data_augment
-# import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 
 class MyDataset(Dataset):
@@ -65,10 +61,18 @@ class MyDataset(Dataset):
     def __getitem__(self, index):
         imageName, labelName = self.filenames[index]
         
-        image    = Image.open(imageName)
-        target   = self.label2target(labelName, image.size)
-        if self.transform: image = self.transform(image)
+        image = Image.open(imageName)
+        boxes, classIndexs = self.readtxt(labelName)
+        
+        if self.train:
+            image = self.RandomAdjustHSV(image, 0.8, 1.2)
+            if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
+            if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
 
+        target = self.encoder(boxes, classIndexs, image.size)
+        target = torch.from_numpy(target)
+
+        if self.transform: image = self.transform(image)
         return image, target, labelName
 
     def encoder(self, boxes, classindex, image_size):
@@ -105,12 +109,10 @@ class MyDataset(Dataset):
         target[j, i, 7:9] = wh
         target[j, i, 5:7] = deltaXY
 
-        # target = torch.from_numpy(target)
-        # print("target.shape: {}".format(target.shape))
-
+        # Target in numpy
         return target
 
-    def label2target(self, labelName, image_size):
+    def readtxt(self, labelName):
         """ 
         Transfer the labels to the tensor. 
 
@@ -131,15 +133,46 @@ class MyDataset(Dataset):
         boxes = np.asarray(labels[:, :8]).astype(np.float)
         boxes = np.concatenate((boxes[:, :2], boxes[:, 4:6]), axis=1)
 
-        target = self.encoder(boxes, classIndexs, image_size)
+        return boxes, classIndexs
 
-        # if self.difficulty:
-        #     difficulties = np.asarray(labels[:, 9]).astype(np.int)
-        #     keep_index   = np.argswhere(difficulties == self.difficulty).reshape(-1)    # [N, 1] -> [N]
-        #     target = target[keep_index].reshape(-1, 10)                                 # [N, 10]
+    def RandomAdjustHSV(self, img, min_f, max_f):
+        if random.random() < 0.5:
+            factor = random.uniform(min_f, max_f)
+            img = ImageEnhance.Color(img).enhance(factor)            
+        
+        if random.random() < 0.5:
+            factor = random.uniform(min_f, max_f)
+            img = ImageEnhance.Brightness(img).enhance(factor)
+        
+        if random.random() < 0.5:
+            factor = random.uniform(min_f, max_f)
+            img = ImageEnhance.Contrast(img).enhance(factor)
 
-        target = torch.from_numpy(target)
-        return target
+        if random.random() < 0.5:
+            factor = random.uniform(min_f, max_f)
+            img = ImageEnhance.Sharpness(img).enhance(factor)
+
+        return img
+
+    def HorizontalFlip(self, im, boxes):
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        h, w = im.size
+        xmin = w - boxes[:, 2]
+        xmax = w - boxes[:, 0]
+        boxes[:, 0] = xmin
+        boxes[:, 2] = xmax
+
+        return im, boxes
+
+    def VerticalFlip(self, im, boxes):
+        im = im.transpose(Image.FLIP_TOP_BOTTOM)
+        h, w = im.size
+        ymin = h - boxes[:, 3]
+        ymax = h - boxes[:, 1]
+        boxes[:, 1] = ymin
+        boxes[:, 3] = ymax
+
+        return im, boxes
 
 def dataset_unittest():
     trainset = MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([

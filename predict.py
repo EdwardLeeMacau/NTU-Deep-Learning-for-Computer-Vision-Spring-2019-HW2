@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import os
 import time
 import random
+import argparse
 import logging
 import logging.config
 from PIL import Image
@@ -19,7 +20,6 @@ import numpy as np
 import models
 from dataset import MyDataset
 import utils
-import cmdparse
 
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
@@ -187,7 +187,7 @@ def predict(images: torch.Tensor, model):
     return boxes, classIndexs, probs
 """
 
-def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred", image_size=512., write=True):
+def export(boxes, classNames, probs, labelName, outputpath, image_size=512., write=True):
     """ Write one output file with the boxes and the classnames. """
     boxes = (boxes * image_size).round()
     # print("Boxes: {}".format(boxes))
@@ -205,18 +205,13 @@ def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val150
     probs = list(map(str, list(map(round_func, probs.data.tolist()))))
     classNames = list(map(str, classNames))
 
-    if not write:
-        return rect, classNames, probs
+    with open(os.path.join(outputpath, labelName.split("/")[-1]), "w") as textfile:
+        for i in range(0, rect.shape[0]):
+            prob = probs[i]
+            className = classNames[i]
 
-    else:
-        with open(os.path.join(outputpath, labelName.split("/")[-1]), "w") as textfile:
-            for i in range(0, rect.shape[0]):
-                prob = probs[i]
-                className = classNames[i]
-
-                textfile.write(" ".join(map(str, rect[i].data.tolist())) + " ")
-                textfile.write(" ".join((className, prob)) + "\n")
-        return 
+            textfile.write(" ".join(map(str, rect[i].data.tolist())) + " ")
+            textfile.write(" ".join((className, prob)) + "\n")
 
 def decode_unittest():
     output = torch.zeros(1, 7, 7, 26)
@@ -253,16 +248,15 @@ def main():
     3.  Output File if needed.
     4.  MAP calculation. 
     """
-    os.system("clear")
+    
     start = time.time()
 
     torch.set_default_dtype(torch.float)
     device = utils.selectDevice()
 
     model = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model = utils.loadModel(cmdparse.args.model, model)
+    model = utils.loadModel(args.model, model)
     model.eval()
-    print("Read Model: {}".format(cmdparse.args.model))
     
     trainset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
         transforms.Resize((448, 448)),
@@ -278,14 +272,16 @@ def main():
     testset_loader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=4)
 
     # Return the imageName for storing the predict_msg
-    if not os.path.exists(cmdparse.args.output):
-        os.mkdir(cmdparse.args.output)
+    if not os.path.exists(args.output):
+        os.mkdir(args.output)
 
-    if not os.path.exists("hw2_train_val/train15000/labelTxt_hbb_pred"):
-        os.mkdir("hw2_train_val/train15000/labelTxt_hbb_pred")
+    if args.command == "train":
+        loader = trainset_loader
+    elif args.command == "val":
+        loader = testset_loader
 
     # Testset prediction
-    for data, target, labelName in testset_loader:
+    for data, target, labelName in loader:
         data, target = data.to(device), target.to(device)
         
         output = model(data)
@@ -294,31 +290,30 @@ def main():
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
         # Write the output file
-        if cmdparse.args.export: 
-            export(boxes, classNames, probs, labelName[0], write=True)
-        if not cmdparse.args.export:
-            rect, classNames, probs = export(boxes, classNames, probs, "", write=False)
+        if args.export: 
+            export(boxes, classNames, probs, labelName[0], args.output, write=True)
 
-    # Trainset prediction
-    """
-    for data, _, labelName in trainset_loader:
-        data = data.to(device)
-
-        output = model(data)
-        boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
-
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-
-        # Write the output file
-        if cmdparse.args.export:
-            export(boxes, classNames, probs, labelName[0], outputpath="hw2_train_val/train15000/labelTxt_hbb_pred")
-            logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
-    """
-        
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
     # decode_unittest()
-    encoder_unittest()
-    # main()
+    # encoder_unittest()
+    os.system("clear")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, required=True, help="Set the initial learning rate")
+    parser.add_argument("--worker", default=4, type=int)
+    subparsers = parser.add_subparsers(required=True, dest="command")
+    
+    train_parser = subparsers.add_parser("train")
+    train_parser.add_argument("--output", default="hw2_train_val/train15000/labelTxt_hbb_pred")
+    
+    val_parser = subparsers.add_parser("val")
+    val_parser.add_argument("--output", default="hw2_train_val/val1500/labelTxt_hbb_pred")
+
+    args = parser.parse_args()
+
+    print(args)
+
+    main()
