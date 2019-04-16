@@ -156,9 +156,19 @@ if __name__ == "__main__":
     os.system("clear")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
-    parser.add_argument("--epochs", default=50, type=int, help="Set the epochs")
-    parser.add_argument("--worker", default=4, type=int, help="Set the workers")
+    subparsers = parser.add_subparsers(required=True, dest="command")
+
+    basic_parser = subparsers.add_parser("basic")
+    basic_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    basic_parser.add_argument("--epochs", default=50, type=int, help="Set the epochs")
+    basic_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
+    
+    improve_parser = subparsers.add_parser("improve")
+    improve_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    improve_parser.add_argument("--epochs", default=50, type=int, help="Set the epochs")
+    improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
+    
     args = parser.parse_args()
+    print(args)
 
     main()

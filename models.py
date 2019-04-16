@@ -177,8 +177,6 @@ class YoloLoss(nn.Module):
         no_object_loss = (F.mse_loss(noobj_predict[:, 4], noobj_target[:, 4], size_average=False)
                          + F.mse_loss(noobj_predict[:, 9], noobj_target[:, 9], size_average=False))
 
-        loss += self.lambda_noobj * no_object_loss
-
         # 2. Compute the loss of containing object
         boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
         boxes_target  = coord_target[:, :10]        # Match "delta_xy" in dataset.py
@@ -223,15 +221,7 @@ class YoloLoss(nn.Module):
         # print("coord_not_response_mask: {}".format(coord_not_response_mask))
 
         boxes_predict = boxes_predict.contiguous().view(-1, 5)
-
-        # Modify the Ground Truth
-        # For 2.1 response loss: the gt of the confidence is the IoU(predict, target)
-        # For 2.2 not response loss: the gt of the confidence is 0
-        
-        # boxes_target_iou = boxes_target.type(torch.cuda.FloatTensor).contiguous().view(-1, 5)
         boxes_target_iou = boxes_target.type(torch.float).contiguous().view(-1, 5)
-        # print(boxes_target_iou.dtype)
-        # print(iou_max.dtype)
         boxes_target_iou[coord_response_mask, 4]     = iou_max
         boxes_target_iou[coord_not_response_mask, 4] = 0
         # print("boxes_target_iou.shape: {}".format(boxes_target_iou.shape))
@@ -245,10 +235,6 @@ class YoloLoss(nn.Module):
         # print("Boxes_target_response: {}".format(boxes_target_response))
         # boxes_target_response = boxes_target[coord_response_mask].view(-1, 5)
 
-        # 2.1 response loss(Confidence, width & height, centerxy)
-        # print("obj_confidence_loss: {}".format(F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)))
-        # print("coord_xy_loss: {}".format(self.lambda_coord * F.mse_loss(boxes_predict_response[:, :2], boxes_target_response[:, :2], size_average=False)))
-        # print("coord_hw_loss: {}".format(self.lambda_coord * F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False)))
         """ Class 3: Contain_loss """
         response_loss = F.mse_loss(boxes_predict_response[:, 4], boxes_target_response[:, 4], size_average=False)
         

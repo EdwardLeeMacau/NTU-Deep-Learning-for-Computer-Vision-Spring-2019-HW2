@@ -28,7 +28,7 @@ classnames = utils.classnames
 labelEncoder  = utils.labelEncoder
 oneHotEncoder = utils.oneHotEncoder
 
-def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2, class_num=16):
+def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2, class_num=16):
     """
     Args:
       output: [batch_size, grid_num, grid_num, 5 * bbox_num + class_num]
@@ -37,10 +37,7 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
       keep_boxes: <list of list>
       classNames: <list of list>
     """
-    grid_num = 7
-    probs = []
-    boxes = []
-    classIndexs = []
+    boxes, classIndexs, probs = [], [], []
     cell_size   = 1. / grid_num
     batch_size  = output.shape[0]
     
@@ -100,13 +97,6 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
 
     # Prevent the boxes go outside the image, so clamped the xy coordinate to 0-1
     boxes = boxes.clamp(min=0., max=1.)
-
-    # if random.random() < 0.01:
-    #     print("*** Show random answer: ")
-    #     print("*** Boxes: {}".format(boxes))
-    #     print("*** Probs: {}".format(probs))
-    #     print("*** ClassIndex: {}".format(classIndexs))
-
     keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
 
     return boxes[keep_index], classIndexs[keep_index], probs[keep_index]
@@ -123,7 +113,6 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
       keep_boxes: [x]
     """    
     _, index = scores.sort(descending=True)
-    # print(index)
     keep_boxes = []
     
     x1 = boxes[:, 0]
@@ -133,7 +122,6 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
 
     areas = (x2 - x1) * (y2 - y1)
 
-    # 1 image case first
     while index.numel() > 0:
         if index.numel() == 1:  
             keep_boxes.append(index.item())
@@ -141,9 +129,6 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
         
         i = index[0].item()
         keep_boxes.append(i)
-        
-        # Check index runs well
-        # print("x1[index[1:]] {}".format(x1[index[1:]]))
 
         # IoU calculating
         xx1 = x1[index[1:]].clamp(min=x1[i])
@@ -155,42 +140,25 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
         h = (yy2 - yy1).clamp(min=0)
         inter = w * h
 
-        # print("IoU: {}".format(IoU(boxes[i], boxes[index[1: ]])))
         ovr = inter / (areas[i] + areas[index[1:]] - inter)
-        # print("Ovr: {}".format(ovr))
 
         # Supress the bbox where overlap area > iou_threshold, return the remain index
         ids = (ovr <= iou_threshold).nonzero().squeeze()
-        # print(ids)
         # IoU calculated.
 
-        # print("ids.shape: {}".format(ids.shape))
-        # print("ids: {}".format(ids))
-
-        # Check if it is no bbox remains: break
         if ids.numel() == 0: break
         index = index[ids + 1]
 
     return torch.tensor(keep_boxes, dtype=torch.long)
 
-"""
-def predict(images: torch.Tensor, model):
-    output = model(images)
-    boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
-
-    return boxes, classIndexs, probs
-"""
-
-def export(boxes, classNames, probs, labelName, outputpath, image_size=512., write=True):
+def export(boxes, classNames, probs, labelName, outputpath, image_size=512.):
     """ Write one output file with the boxes and the classnames. """
     boxes = (boxes * image_size).round()
-    # print("Boxes: {}".format(boxes))
     rect  = torch.zeros(boxes.shape[0], 8)
 
     # Extand (x1, y1, x2, y2) to (x1, y1, x2, y1, x2, y2, x1, y2)
     rect[:,  :3] = boxes[:, :3]
-    rect[:, 4:6] = boxes[:, 2:]
-    rect[:, 3]   = boxes[:, 1]
+    rect[:, 3:6] = boxes[:, 1:]
     rect[:, 6]   = boxes[:, 0]
     rect[:, 7]   = boxes[:, 3]
 
@@ -220,16 +188,57 @@ def decode_unittest():
     classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
 def encoder_unittest():
-    indexs = labelEncoder.transform(classnames)
-    onehot = oneHotEncoder.transform(indexs)
-    reverse_index = oneHotEncoder.inverse_transform(onehot)
-    reverse_classnames = labelEncoder.inverse_transform(classnames)
-
     print("*** classnames: \n{}".format(classnames))
+    
+    indexs = labelEncoder.transform(classnames).reshape(-1, 1)
     print("*** indexs: \n{}".format(indexs))
+    
+    onehot = oneHotEncoder.transform(indexs)
     print("*** onehot: \n{}".format(onehot))
+    
+    reverse_index = oneHotEncoder.inverse_transform(onehot).reshape(-1)
     print("*** reverse index: \n{}".format(reverse_index))
+    
+    reverse_classnames = labelEncoder.inverse_transform(reverse_index.astype(int))
     print("*** reverse classnames: \n{}".format(reverse_classnames))
+    
+def system_unittest():
+    torch.set_default_dtype(torch.float)
+    device = utils.selectDevice()
+    
+    dataset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
+        transforms.Resize((448, 448)),
+        transforms.ToTensor()
+    ]))
+
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=args.worker)
+    
+    # Testset prediction
+    for _, target, labelName in loader:
+        boxes, classIndexs, probs = decode(target, prob_min=args.prob, iou_threshold=args.iou)
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+        
+        print("Raw Data: ")
+        with open(labelName, "r") as textfile:
+            content = textfile.readlines()
+            print("\n".join(content))
+
+        print("My Decoder: ")
+        boxes = (boxes * 512).round()
+        rect  = torch.zeros(boxes.shape[0], 8)
+        rect[:,  :3] = boxes[:, :3]
+        rect[:, 3:6] = boxes[:, 1:]
+        rect[:, 6]   = boxes[:, 0]
+        rect[:, 7]   = boxes[:, 3]
+        round_func = lambda x: round(x, 3)
+        probs = list(map(str, list(map(round_func, probs.data.tolist()))))
+        classNames = list(map(str, classNames))
+        for i in range(0, rect.shape[0]):
+            prob = probs[i]
+            className = classNames[i]
+            print(" ".join(map(str, rect[i].data.tolist())) + " ")
+            print(" ".join((className, prob)) + "\n")
+
 
 def main():
     """
@@ -262,8 +271,8 @@ def main():
         transforms.ToTensor()
     ]))
 
-    trainset_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=4)
-    testset_loader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=4)
+    trainset_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=args.worker)
+    testset_loader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
 
     # Return the imageName for storing the predict_msg
     if not os.path.exists(args.output):
@@ -279,13 +288,15 @@ def main():
         data, target = data.to(device), target.to(device)
         
         output = model(data)
-        boxes, classIndexs, probs = decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2)
+        boxes, classIndexs, probs = decode(output, prob_min=args.prob, iou_threshold=args.iou)
         
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+        print("ClassIndexs: {}".format(classIndexs))
+        print("ClassNames: {}".format(classNames))
 
         # Write the output file
         if args.export: 
-            export(boxes, classNames, probs, labelName[0], args.output, write=True)
+            export(boxes, classNames, probs, labelName[0], args.output)
 
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
@@ -293,11 +304,15 @@ def main():
 if __name__ == "__main__":
     # decode_unittest()
     # encoder_unittest()
+    # system_unittest()
+
     os.system("clear")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="Set the initial learning rate")
     parser.add_argument("--worker", default=4, type=int)
+    parser.add_argument("--iou", default=0.5, type=float)
+    parser.add_argument("--prob", default=0.1, type=float)
     subparsers = parser.add_subparsers(required=True, dest="command")
     
     train_parser = subparsers.add_parser("train")

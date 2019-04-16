@@ -42,14 +42,16 @@ class MyDataset(Dataset):
         self.class_num = class_num
         # self.difficulty = difficulty
 
-        numDigits = len(str(size))
-        for i in range(0, size):
-            i = str(i).zfill(numDigits)
-            
-            imageName = i + ".jpg"
-            labelName = i + ".txt"
-            imageName = os.path.join(root, "images", imageName)
-            labelName = os.path.join(root, "labelTxt_hbb", labelName)
+        image_folder = os.path.join(root, "images")
+        anno_folder  = os.path.join(root, "labelTxt_hbb")
+
+        imageNames = os.listdir(image_folder)
+
+        # numDigits = len(str(size))
+        # for i in range(0, size):
+        for name in imageNames:
+            imageName = os.path.join(image_folder, name)
+            labelName = os.path.join(anno_folder, name.split(".")[0] + ".txt")
             
             self.filenames.append((imageName, labelName))
         
