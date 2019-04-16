@@ -52,6 +52,13 @@ def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bb
     contain = torch.cat((contain1, contain2), -1)
     # print("Contain.shape: {}".format(contain.shape))
     # print(contain[3, 3])
+
+    """ Newly add """
+    # max_conf_1, class_idx_1 = (output[:, :, 4] * output[:, :, 10:]).max()
+    # max_conf_2, class_idx_1 = (output[:, :, 9] * output[:, :, 10:]).max()
+
+    # mask1 = torch.cat((max_conf_1.unsqueeze(-1), max_conf_2.unsqueeze(-1)), dim=-1)
+    """ Newly add ended """
     
     mask1 = (contain > prob_min)
     mask2 = (contain == contain.max())
@@ -284,7 +291,7 @@ def main():
         loader = testset_loader
 
     # Testset prediction
-    for data, target, labelName in loader:
+    for batch_idx, (data, target, labelName) in enumerate(loader, 1):
         data, target = data.to(device), target.to(device)
         
         output = model(data)
@@ -294,25 +301,27 @@ def main():
         print("ClassIndexs: {}".format(classIndexs))
         print("ClassNames: {}".format(classNames))
 
-        # Write the output file
-        if args.export: 
-            export(boxes, classNames, probs, labelName[0], args.output)
+        export(boxes, classNames, probs, labelName[0], args.output)
+        if batch_idx % 100 == 0:
+            print(batch_idx)
 
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
     # decode_unittest()
-    # encoder_unittest()
+    encoder_unittest()
     # system_unittest()
+
+    raise NotImplementedError
 
     os.system("clear")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="Set the initial learning rate")
     parser.add_argument("--worker", default=4, type=int)
-    parser.add_argument("--iou", default=0.5, type=float)
-    parser.add_argument("--prob", default=0.1, type=float)
+    parser.add_argument("--iou", default=0.5, type=float, help="NMS iou_threshold")
+    parser.add_argument("--prob", default=0.1, type=float, help="NMS prob_min, pick up the bbox with the class_prob > prob_min")
     subparsers = parser.add_subparsers(required=True, dest="command")
     
     train_parser = subparsers.add_parser("train")

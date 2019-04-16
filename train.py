@@ -46,21 +46,21 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
         model.train()
 
         if epoch == 21:
-            lr = 0.0002
+            lr = 2e-4
 
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
             logger.info("Learning rate adjusted to: {}".format(lr))
 
         if epoch == 41:
-            lr = 0.0005
+            lr = 1e-4
         
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
             logger.info("Learning rate adjusted to: {}".format(lr))
 
         if epoch == 61:
-            lr = 0.00001
+            lr = 1e-5
         
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
@@ -141,7 +141,7 @@ def main():
         transforms.ToTensor()
     ]))
 
-    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=args.worker)
+    trainLoader = DataLoader(trainset, batch_size=args.batchs, shuffle=True, num_workers=args.worker)
     testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
 
     device = utils.selectDevice(show=True)
@@ -160,6 +160,7 @@ if __name__ == "__main__":
 
     basic_parser = subparsers.add_parser("basic")
     basic_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    basic_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
     basic_parser.add_argument("--epochs", default=50, type=int, help="Set the epochs")
     basic_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     

@@ -67,9 +67,9 @@ class MyDataset(Dataset):
         boxes, classIndexs = self.readtxt(labelName)
         
         if self.train:
-            image = self.RandomAdjustHSV(image, 0.8, 1.2)
+            # image = self.RandomAdjustHSV(image, 0.8, 1.2)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
-            if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
+            # if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
 
         target = self.encoder(boxes, classIndexs, image.size)
         target = torch.from_numpy(target)
@@ -101,7 +101,7 @@ class MyDataset(Dataset):
         # Confidence
         target[j, i, 4] = 1
         target[j, i, 9] = 1
-        target[j, i, classindex + 9] = 1
+        target[j, i, classindex + 10] = 1
 
         # Coordinate transform to xyhw
         cornerXY = ij * cell_size
