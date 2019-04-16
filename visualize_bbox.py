@@ -11,13 +11,13 @@ import cv2
 from PIL import Image
 import numpy as np
 
-DOTA_CLASSES = (  # always index 0
+DATA_CLASSES = (  # always index 0
     'plane', 'ship', 'storage-tank', 'baseball-diamond',
     'tennis-court', 'basketball-court', 'ground-track-field',
     'harbor', 'bridge', 'small-vehicle', 'large-vehicle',
     'helicopter', 'roundabout', 'soccer-ball-field',
     'swimming-pool', 'container-crane')
-
+  
 Color = [[0, 0, 0],
                     [128, 0, 0],
                     [0, 128, 0],
@@ -80,7 +80,7 @@ def visualize(imgfile, detfile, outputfile):
     result = parse_det(detfile)
 
     for left_up, right_bottom, class_name, prob in result:
-        color = Color[DOTA_CLASSES.index(class_name)]
+        color = Color[DATA_CLASSES.index(class_name)]
         cv2.rectangle(image,left_up,right_bottom,color,2)
         label = class_name + str(round(prob,2))
         text_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
@@ -120,7 +120,9 @@ if __name__ == '__main__':
         detfolder = os.path.join(args.root, "labelTxt_hbb_pred")
         txtnames = [ x.split(".")[0] for x in sorted(os.listdir(detfolder)) ]
         
-        for img_det_name in txtnames:
+        for index, img_det_name in enumerate(txtnames, 1):
+            if index % 100 == 0: print(index)
+            
             imgfile = os.path.join(args.root, "images", img_det_name+'.jpg')
             detfile = os.path.join(args.root, "labelTxt_hbb_pred", img_det_name+'.txt')
             GTfile  = os.path.join(args.root, "labelTxt_hbb", img_det_name+'.txt')

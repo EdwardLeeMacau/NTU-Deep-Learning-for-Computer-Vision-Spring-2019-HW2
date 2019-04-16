@@ -254,10 +254,10 @@ if __name__ == "__main__":
     improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
 
     both_parser = subparsers.add_parser("both")
-    improve_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
-    improve_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
-    improve_parser.add_argument("--epochs", default=60, type=int, help="Set the epochs")
-    improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
+    both_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    both_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
+    both_parser.add_argument("--epochs", default=60, type=int, help="Set the epochs")
+    both_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     args = parser.parse_args()
     print(args)
