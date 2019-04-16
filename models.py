@@ -165,10 +165,10 @@ class YoloLoss(nn.Module):
         coord_mask = (target[:, :, :, 4] > 0).unsqueeze(-1).expand_as(target)
         noobj_mask = (target[:, :, :, 4] == 0).unsqueeze(-1).expand_as(target)
 
-        coord_predict = output[coord_mask].view(-1, 26)
-        coord_target  = target[coord_mask].view(-1, 26)
-        noobj_predict = output[noobj_mask].view(-1, 26)
-        noobj_target  = output[noobj_mask].view(-1, 26)
+        coord_predict = output[coord_mask].view(-1, 26).type(torch.float)
+        coord_target  = target[coord_mask].view(-1, 26).type(torch.float)
+        noobj_predict = output[noobj_mask].view(-1, 26).type(torch.float)
+        noobj_target  = target[noobj_mask].view(-1, 26).type(torch.float)
 
         """ Loss 1: Class_loss """
         class_loss = F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
