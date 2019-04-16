@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import os
 import time
 import random
+import pdb
 import argparse
 import logging
 import logging.config
@@ -52,13 +53,6 @@ def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bb
     contain = torch.cat((contain1, contain2), -1)
     # print("Contain.shape: {}".format(contain.shape))
     # print(contain[3, 3])
-
-    """ Newly add """
-    # max_conf_1, class_idx_1 = (output[:, :, 4] * output[:, :, 10:]).max()
-    # max_conf_2, class_idx_1 = (output[:, :, 9] * output[:, :, 10:]).max()
-
-    # mask1 = torch.cat((max_conf_1.unsqueeze(-1), max_conf_2.unsqueeze(-1)), dim=-1)
-    """ Newly add ended """
     
     mask1 = (contain > prob_min)
     mask2 = (contain == contain.max())
@@ -70,22 +64,17 @@ def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bb
         for j in range(grid_num):
             for b in range(2):
                 if mask[i, j, b] == 1:
-                    box = output[i, j, b * 5: b * 5 + 4]
+                    box = output[i, j, b*5: b*5+4]
                     contain_prob = output[i, j, b*5+4].type(torch.float)
                         
                     # Recover the base of xy as image_size
-                    xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
-                    # print("xy.shape: {}".format(xy.shape))
-                    # print("xy: {}".format(xy))
+                    xy = torch.tensor([j, i], dtype=torch.float).unsqueeze(0) * cell_size
 
                     box[:2] = box[:2] * cell_size + xy
                     box_xy  = torch.zeros(box.size(), dtype=torch.float)
                     box_xy[:2] = box[:2] - 0.5 * box[2:]
                     box_xy[2:] = box[:2] + 0.5 * box[2:]                        
                     max_prob, classIndex = torch.max(output[i, j, 10:], 0)
-                    # print("classIndex: {}".format(classIndex))
-                    # print("max_prob.shape: {}".format(max_prob.shape))
-                    # print("max_prob: {}".format(max_prob))
 
                     if float((contain_prob * max_prob).item()) > prob_min:
                         classIndex = classIndex.unsqueeze(0)
@@ -215,11 +204,11 @@ def system_unittest():
         transforms.ToTensor()
     ]))
 
-    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=args.worker)
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
     
     # Testset prediction
     for _, target, labelName in loader:
-        boxes, classIndexs, probs = decode(target, prob_min=args.prob, iou_threshold=args.iou)
+        boxes, classIndexs, probs = decode(target, prob_min=0, iou_threshold=0.5)
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
         
         print("Raw Data: ")
@@ -242,6 +231,10 @@ def system_unittest():
             className = classNames[i]
             print(" ".join(map(str, rect[i].data.tolist())) + " ")
             print(" ".join((className, prob)) + "\n")
+
+        pdb.set_trace()
+
+        
 
 
 def main():
@@ -308,7 +301,8 @@ def main():
 if __name__ == "__main__":
     # decode_unittest()
     # encoder_unittest()
-    # system_unittest()
+    
+    system_unittest()
 
     # raise NotImplementedError
 

@@ -12,26 +12,16 @@ import torchvision.transforms as transforms
 from PIL import Image, ImageEnhance, ImageFilter
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from torch.utils.data import Dataset, DataLoader
+import utils
 
 class MyDataset(Dataset):
-    classnames = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
-              'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
-              'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 
-              'harbor', 'swimming-pool', 'helicopter', 'container-crane']
+    classnames = utils.classnames
+    labelEncoder = utils.labelEncoder
+    oneHotEncoder = utils.oneHotEncoder
 
-    labelEncoder  = LabelEncoder()
-    oneHotEncoder = OneHotEncoder(sparse=False)
-    integerEncoded = labelEncoder.fit_transform(classnames)
-    oneHotEncoded  = oneHotEncoder.fit_transform(integerEncoded.reshape(16, 1))
-
-    def __init__(self, root, size, difficulty=None, grid_num=7, bbox_num=2, class_num=16, train=True, transform=None):
+    def __init__(self, root, size, grid_num=7, bbox_num=2, class_num=16, train=True, transform=None):
         """ 
         Save the imageNames and the labelNames and read in future.
-
-        Args:
-            (...)
-        Return:
-            (...)
         """
         self.filenames = []
         self.root      = root
@@ -40,15 +30,12 @@ class MyDataset(Dataset):
         self.grid_num  = grid_num
         self.bbox_num  = bbox_num
         self.class_num = class_num
-        # self.difficulty = difficulty
 
         image_folder = os.path.join(root, "images")
         anno_folder  = os.path.join(root, "labelTxt_hbb")
 
         imageNames = os.listdir(image_folder)
 
-        # numDigits = len(str(size))
-        # for i in range(0, size):
         for name in imageNames:
             imageName = os.path.join(image_folder, name)
             labelName = os.path.join(anno_folder, name.split(".")[0] + ".txt")
@@ -65,7 +52,9 @@ class MyDataset(Dataset):
         
         image = Image.open(imageName)
         boxes, classIndexs = self.readtxt(labelName)
-        
+        print("Read boxes: {}".format(boxes))
+        print("Read ClassIndex: {}".format(classIndexs))
+
         if self.train:
             # image = self.RandomAdjustHSV(image, 0.8, 1.2)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
