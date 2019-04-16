@@ -45,21 +45,21 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
     for epoch in range(1, epochs + 1):
         model.train()
 
-        if epoch == 20:
-            lr = 0.0005
+        if epoch == 21:
+            lr = 0.0002
 
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
             logger.info("Learning rate adjusted to: {}".format(lr))
 
-        if epoch == 50:
-            lr = 0.0001
+        if epoch == 41:
+            lr = 0.0005
         
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
             logger.info("Learning rate adjusted to: {}".format(lr))
 
-        if epoch == 65:
+        if epoch == 61:
             lr = 0.00001
         
             for param_group in optimizer.param_groups:
@@ -99,7 +99,7 @@ def test(model, dataloader: DataLoader, device, epochs):
     criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
     model.eval()
     test_loss = 0
-    mean_average_precision = 0
+    mean_ap = 0
 
     with torch.no_grad():
         for data, target, _ in dataloader:
@@ -125,7 +125,7 @@ def test(model, dataloader: DataLoader, device, epochs):
         logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
         logger.info("*** Test set - AP: {}".format(classaps))
     
-    return test_loss, mean_average_precision
+    return test_loss, mean_ap
 
 def main():
     start = time.time()
@@ -146,7 +146,7 @@ def main():
 
     device = utils.selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model  = train(model, trainLoader, testLoader, 30, device, lr=0.001, log_interval=10, save_interval=0)
+    model  = train(model, trainLoader, testLoader, args.epochs, device, lr=args.lr, log_interval=10, save_interval=0)
 
     end = time.time()
     logger.info("*** Training ended.")
