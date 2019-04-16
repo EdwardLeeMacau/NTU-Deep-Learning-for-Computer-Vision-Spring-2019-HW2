@@ -42,29 +42,11 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
     loss_list = []
     mean_aps  = []
 
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[25, 40, 60], gamma=0.1)
+
     for epoch in range(1, epochs + 1):
         model.train()
-
-        if epoch == 21:
-            lr = 2e-4
-
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-            logger.info("Learning rate adjusted to: {}".format(lr))
-
-        if epoch == 41:
-            lr = 1e-4
-        
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-            logger.info("Learning rate adjusted to: {}".format(lr))
-
-        if epoch == 61:
-            lr = 1e-5
-        
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-            logger.info("Learning rate adjusted to: {}".format(lr))
+        scheduler.step()
 
         for batch_idx, (data, target, _) in enumerate(train_dataloader):
             data, target = data.to(device), target.to(device)
@@ -81,9 +63,18 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
             
             iteration += 1
 
-        test_loss, mean_ap = test(model, val_dataloader, device, epoch)
-        loss_list.append(test_loss)
-        mean_aps.append(mean_ap)
+        val_loss = test_loss(model, criterion, val_dataloader, device)
+        loss_list.append(val_loss)
+        
+        if epoch > 20:
+            mean_ap = test_map(model, criterion, val_dataloader, device)
+            mean_aps.append((epoch, mean_ap))
+        
+        if epoch == 2:
+            utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
+        
+        if epoch == 10:
+            utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
         
         if (epoch >= 20) and (epoch % 5 == 0):
             utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
@@ -95,23 +86,27 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
 
     return model
 
-def test(model, dataloader: DataLoader, device, epochs):
-    criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
+def test_loss(model, criterion, dataloader: DataLoader, device):
     model.eval()
-    test_loss = 0
-    mean_ap = 0
+    loss = 0
 
     with torch.no_grad():
         for data, target, _ in dataloader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            test_loss += criterion(output, target).item()
+            loss += criterion(output, target).item()
 
-    test_loss /= len(dataloader.dataset)
-    logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))
+    loss /= len(dataloader.dataset)
+    logger.info("*** Test set - Average loss: {:.4f}".format(loss))
+
+    return loss
+
+def test_map(model, criterion, dataloader: DataLoader, device):
+    model.eval()
+    mean_ap = 0
 
     # Calculate the map value
-    if epochs > 20:
+    with torch.no_grad():
         for data, target, labelNames in dataloader:
             data, target = data.to(device), target.to(device)
             output = model(data)
@@ -125,7 +120,7 @@ def test(model, dataloader: DataLoader, device, epochs):
         logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
         logger.info("*** Test set - AP: {}".format(classaps))
     
-    return test_loss, mean_ap
+    return mean_ap
 
 def main():
     start = time.time()
@@ -133,12 +128,14 @@ def main():
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
     trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
         transforms.Resize((448, 448)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ]))
 
     testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
         transforms.Resize((448, 448)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ]))
 
     trainLoader = DataLoader(trainset, batch_size=args.batchs, shuffle=True, num_workers=args.worker)
@@ -166,6 +163,7 @@ if __name__ == "__main__":
     
     improve_parser = subparsers.add_parser("improve")
     improve_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    improve_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
     improve_parser.add_argument("--epochs", default=50, type=int, help="Set the epochs")
     improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     

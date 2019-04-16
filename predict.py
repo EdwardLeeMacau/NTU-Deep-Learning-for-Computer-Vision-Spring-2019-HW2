@@ -210,9 +210,6 @@ def encoder_unittest():
     print("*** reverse classnames: \n{}".format(reverse_classnames))
     
 def system_unittest():
-    torch.set_default_dtype(torch.float)
-    device = utils.selectDevice()
-    
     dataset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor()
@@ -310,10 +307,10 @@ def main():
 
 if __name__ == "__main__":
     # decode_unittest()
-    encoder_unittest()
+    # encoder_unittest()
     # system_unittest()
 
-    raise NotImplementedError
+    # raise NotImplementedError
 
     os.system("clear")
 
