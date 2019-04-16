@@ -288,8 +288,8 @@ def main():
         boxes, classIndexs, probs = decode(output, prob_min=args.prob, iou_threshold=args.iou)
         
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-        print("ClassIndexs: {}".format(classIndexs))
-        print("ClassNames: {}".format(classNames))
+        # print("ClassIndexs: {}".format(classIndexs))
+        # print("ClassNames: {}".format(classNames))
 
         export(boxes, classNames, probs, labelName[0], args.output)
         if batch_idx % 100 == 0:
@@ -301,9 +301,7 @@ def main():
 if __name__ == "__main__":
     # decode_unittest()
     # encoder_unittest()
-    
-    system_unittest()
-
+    # system_unittest()
     # raise NotImplementedError
 
     os.system("clear")

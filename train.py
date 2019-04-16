@@ -42,7 +42,7 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
     loss_list = []
     mean_aps  = []
 
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[25, 40, 60], gamma=0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20, 40, 50], gamma=0.1)
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -125,7 +125,7 @@ def test_map(model, criterion, dataloader: DataLoader, device):
 def main():
     start = time.time()
 
-    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    # torch.set_default_tensor_type(torch.cuda.FloatTensor)
     trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor(),
@@ -142,8 +142,8 @@ def main():
     testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
 
     device = utils.selectDevice(show=True)
-    model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model  = train(model, trainLoader, testLoader, args.epochs, device, lr=args.lr, log_interval=10, save_interval=0)
+    model = models.Yolov1_vgg16bn(pretrained=True).to(device)
+    model = train(model, trainLoader, testLoader, args.epochs, device, lr=args.lr, log_interval=10, save_interval=0)
 
     end = time.time()
     logger.info("*** Training ended.")
@@ -153,6 +153,7 @@ if __name__ == "__main__":
     os.system("clear")
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--load", type=str, help="Reload the model")
     subparsers = parser.add_subparsers(required=True, dest="command")
 
     basic_parser = subparsers.add_parser("basic")

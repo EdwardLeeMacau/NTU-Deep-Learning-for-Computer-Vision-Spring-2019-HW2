@@ -85,16 +85,16 @@ class YoloLoss(nn.Module):
         # boxes_predict_xy = torch.zeros_like(boxes_predict)
         # boxes_target_xy  = torch.zeros_like(boxes_target)
         
-        # boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / 7 - 0.5 * boxes_predict[:, 2:4]
-        # boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / 7 + 0.5 * boxes_predict[:, 2:4]
-        # boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / 7 - 0.5 * boxes_predict[:, 7:9]
-        # boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / 7 + 0.5 * boxes_predict[:, 7:9]
+        # boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / self.grid_num - 0.5 * boxes_predict[:, 2:4]
+        # boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / self.grid_num + 0.5 * boxes_predict[:, 2:4]
+        # boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / self.grid_num - 0.5 * boxes_predict[:, 7:9]
+        # boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / self.grid_num + 0.5 * boxes_predict[:, 7:9]
         # boxes_predict_xy[:, 4], boxes_predict_xy[:, 9] = boxes_predict[:, 4], boxes_predict[:, 9]
 
-        # boxes_target_xy[:,  :2] = boxes_target[:,  :2] / 7 - 0.5 * boxes_target[:, 2:4]
-        # boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / 7 + 0.5 * boxes_target[:, 2:4]
-        # boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / 7 - 0.5 * boxes_target[:, 7:9]
-        # boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / 7 + 0.5 * boxes_target[:, 7:9]
+        # boxes_target_xy[:,  :2] = boxes_target[:,  :2] / self.grid_num - 0.5 * boxes_target[:, 2:4]
+        # boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / self.grid_num + 0.5 * boxes_target[:, 2:4]
+        # boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / self.grid_num - 0.5 * boxes_target[:, 7:9]
+        # boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / self.grid_num + 0.5 * boxes_target[:, 7:9]
         # boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
 
         num_bbox = tensor1.shape[0]
@@ -254,6 +254,89 @@ class YoloLoss(nn.Module):
         loss /= batch_size
         return loss
 
+class VGG_improve(nn.Module):
+    """
+      input_size  = 448 * 448
+      output_size = 14 * 14 * (5 * 2 + 16) = 1274
+    """
+    def __init__(self, features, output_size=1274, image_size=448):
+        super(VGG, self).__init__()
+        self.features = features
+        self.image_size = image_size
+
+        self.yolo = nn.Sequential(
+            nn.Linear(512 * 14 * 14, 8092),
+            nn.BatchNorm1d(num_features=8092),
+            nn.LeakyReLU(negative_slope=0.02),
+            nn.Dropout(0.5),
+
+            nn.Linear(8092, 14 * 14 * 26)
+        )
+        self._initialize_weights()
+
+    def forward(self, x):
+        """
+          input_size:    n * 3 * 448 * 448
+          VGG16_bn:      n * 512 * 14 * 14
+          Flatten Layer: n * 
+          Yolo Layer:    n * 
+          Sigmoid Layer: n * 
+          Reshape Layer: n * 14 * 14 * 26
+        """
+        # print(x.shape, x.dtype)
+        
+        x = self.features(x)
+        # print(x.shape, x.dtype)
+        
+        x = x.view(x.size(0), -1)
+        # print(x.shape, x.dtype)
+        
+        x = self.yolo(x)
+        # print(x.shape, x.dtype)
+        
+        x = torch.sigmoid(x) 
+        # print(x.shape, x.dtype)
+        
+        x = x.view(-1, 14, 14, 26)
+        # print(x.shape, x.dtype)
+        
+        return x
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
+def make_layers_improve(cfg, batch_norm=False):
+    """
+    Args:
+        cfg: the sequence configuration with ints and chars.
+        batch_norm: provide batch normalization layer
+
+    Return:
+        nn.Sequential(*layers): the model sequence
+    """
+    layers = []
+    in_channels = 3
+    s = 1
+
+    for v in cfg:
+        if v == 'M':
+            layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+        
+        else:
+            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, stride=s, padding=1)
+            
+            if batch_norm:
+                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
+            else:
+                layers += [conv2d, nn.ReLU(inplace=True)]
+            
+            in_channels = v
+
+    return nn.Sequential(*layers)
+
 # Using the configuration to make the layers
 def make_layers(cfg, batch_norm=False):
     """
@@ -307,6 +390,30 @@ cfg = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
 }
 
+def Yolov1_vgg16bn_improve(pretrained=False, **kwargs):
+    """
+    VGG 16-layer model (configuration "D") with batch normalization
+    
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+            
+    Return:
+        yolo: the prediction model YOLO.
+    """
+
+    # print(make_layers(cfg['D'], batch_norm=True))
+
+    yolo = VGG_improve(make_layers_improve(cfg['D'], batch_norm=True), **kwargs)
+
+    vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
+    yolo_state_dict = yolo.state_dict()
+    for k in vgg_state_dict.keys():
+        if k in yolo_state_dict.keys() and k.startswith('features'):
+            yolo_state_dict[k] = vgg_state_dict[k]
+    
+    yolo.load_state_dict(yolo_state_dict)
+    
+    return yolo
 
 def Yolov1_vgg16bn(pretrained=False, **kwargs):
     """
@@ -335,14 +442,16 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
 
 def model_structure_unittest():
     device = utils.selectDevice(show=True)
-    model = Yolov1_vgg16bn(pretrained=True).to(device)
+    model = Yolov1_vgg16bn_improve(pretrained=True).to(device)
+
+    print(model)
     
     img    = torch.rand(1, 3, 448, 448).to(device)
-    target = torch.rand(1, 7, 7, 26).to(device)
+    target = torch.rand(1, 14, 14, 26).to(device)
     output = model(img)
     
     # print(output.size())
-    criterion = YoloLoss(7, 2, 5, 0.5, device)
+    criterion = YoloLoss(14, 2, 5, 0.5, device)
     loss = criterion(output, target)
 
     print("Loss: {}".format(loss))
@@ -376,9 +485,9 @@ def loss_function_unittest():
     print("*** class_loss: {}".format(2* 0.1 ** 2))
     
 if __name__ == '__main__':
-    # model_structure_unittest()
+    model_structure_unittest()
     
-    loss_function_unittest()
+    # loss_function_unittest()
 
     # model = Yolov1_vgg16bn(pretrained=True).to(device)
     # print(model)
