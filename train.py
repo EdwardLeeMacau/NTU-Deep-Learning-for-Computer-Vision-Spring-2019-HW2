@@ -136,7 +136,7 @@ def train_improve(model, train_dataloader, val_dataloader, epochs, device, lr=0.
         logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))
         
         if epoch > 20:
-            mean_ap = test_map(model, criterion, val_dataloader, device)
+            mean_ap = test_map_improve(model, criterion, val_dataloader, device)
             mean_aps.append((epoch, mean_ap))
         
         if epoch == 5:
@@ -182,6 +182,27 @@ def test_map(model, criterion, dataloader: DataLoader, device):
             output = model(data)
 
             boxes, classIndexs, probs = predict.decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2)
+            classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+            predict.export(boxes, classNames, probs, labelNames[0], outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
+        
+        classaps, mean_ap = evaluation.scan_map()
+
+        logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
+        logger.info("*** Test set - AP: {}".format(classaps))
+    
+    return mean_ap
+
+def test_map_improve(model, criterion, dataloader: DataLoader, device):
+    model.eval()
+    mean_ap = 0
+
+    # Calculate the map value
+    with torch.no_grad():
+        for data, target, labelNames in dataloader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+
+            boxes, classIndexs, probs = predict.decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=14, bbox_num=2)
             classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
             predict.export(boxes, classNames, probs, labelNames[0], outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
         

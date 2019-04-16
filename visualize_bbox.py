@@ -115,7 +115,7 @@ if __name__ == '__main__':
     if args.command == "drawdet":
         main()
     elif args.command == "compare":
-        outputfolder = os.path.join(args.root, "image_pred")
+        outputfolder = os.path.join(args.root, "images_pred")
 
         detfolder = os.path.join(args.root, "labelTxt_hbb_pred")
         txtnames = [ x.split(".")[0] for x in sorted(os.listdir(detfolder)) ]
