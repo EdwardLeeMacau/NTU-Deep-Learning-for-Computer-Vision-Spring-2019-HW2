@@ -25,7 +25,6 @@ import utils
 import dataset
 import predict
 import evaluation
-import cmdparse
 
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
@@ -33,13 +32,6 @@ logger = logging.getLogger(__name__)
 classnames    = utils.classnames
 labelEncoder  = utils.labelEncoder
 oneHotEncoder = utils.oneHotEncoder
-
-def selectDevice(show=False):
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
-    print("Device used: ", device)
-
-    return device
 
 def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log_interval=100, save_interval=500, save=True):
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -51,23 +43,30 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
     mean_aps  = []
 
     for epoch in range(1, epochs + 1):
+        model.train()
+
         if epoch == 20:
-            lr = lr * 0.1
+            lr = 0.0005
+
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
-
             logger.info("Learning rate adjusted to: {}".format(lr))
 
-        if epoch == 25:
-            lr = lr * 0.1
+        if epoch == 50:
+            lr = 0.0001
         
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
+            logger.info("Learning rate adjusted to: {}".format(lr))
 
+        if epoch == 65:
+            lr = 0.00001
+        
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
             logger.info("Learning rate adjusted to: {}".format(lr))
 
         for batch_idx, (data, target, _) in enumerate(train_dataloader):
-            # target = target.type(torch.cuda.FloatTensor)
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -80,21 +79,13 @@ def train(model, train_dataloader, val_dataloader, epochs, device, lr=0.001, log
                 logger.info("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
                             epoch, batch_idx * len(data), len(train_dataloader.dataset), 100. * batch_idx / len(train_dataloader), loss.item()))
             
-            # if save_interval > 0:
-            #     if (iteration % save_interval == 0) and (iteration > 0):
-            #         logger.info("Save Checkpoint: {}".format("Yolov1-{}-{}.pth".format(epoch, iteration)))
-            #         utils.saveCheckpoint("Yolov1-{}-{}.pth".format(epoch, iteration), model, optimizer)
-
             iteration += 1
 
         test_loss, mean_ap = test(model, val_dataloader, device, epoch)
         loss_list.append(test_loss)
         mean_aps.append(mean_ap)
         
-        if (epoch >= 40):
-            if (epoch % 2 == 0):
-                utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
-        elif (epoch >= 20) and (epoch % 5 == 0):
+        if (epoch >= 20) and (epoch % 5 == 0):
             utils.saveCheckpoint("Yolov1-{}.pth".format(epoch), model, optimizer)
 
     with open("Training_Record.txt", "w") as textfile:
@@ -122,10 +113,10 @@ def test(model, dataloader: DataLoader, device, epochs):
     # Calculate the map value
     if epochs > 20:
         for data, target, labelNames in dataloader:
-            data = data.to(device)
+            data, target = data.to(device), target.to(device)
             output = model(data)
 
-            boxes, classIndexs, probs = predict.decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
+            boxes, classIndexs, probs = predict.decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2)
             classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
             predict.export(boxes, classNames, probs, labelNames[0], outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
         
@@ -140,20 +131,20 @@ def main():
     start = time.time()
 
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
-    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
+    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor()
     ]))
 
-    testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, transform=transforms.Compose([
+    testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor()
     ]))
 
-    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=cmdparse.args.worker)
-    testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=cmdparse.args.worker)
+    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=args.worker)
+    testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
 
-    device = selectDevice(show=True)
+    device = utils.selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
     model  = train(model, trainLoader, testLoader, 30, device, lr=0.001, log_interval=10, save_interval=0)
 
@@ -161,15 +152,13 @@ def main():
     logger.info("*** Training ended.")
     logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
 
-    # Try to generate the textfiles.
-    # start = time.time()
-    # for data, target, labelNames in testLoader:
-    #    boxes, classIndexs, probs = predict.predict(data, model)
-    #     # predict.export(boxes, classNames, labelName)
-    # end = time.time()
-
-    # logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
-
 if __name__ == "__main__":
     os.system("clear")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    parser.add_argument("--epochs", default=50, type=int, help="Set the epochs")
+    parser.add_argument("--worker", default=4, type=int, help="Set the workers")
+    args = parser.parse_args()
+
     main()
