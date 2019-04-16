@@ -135,12 +135,6 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
 
     # 1 image case first
     while index.numel() > 0:
-        # print(index)
-        # print(index[0].item())
-        # i = index[0].item()
-        # keep_boxes.append(i)
-
-        # Check if it is the last bbox: break
         if index.numel() == 1:  
             keep_boxes.append(index.item())
             break
