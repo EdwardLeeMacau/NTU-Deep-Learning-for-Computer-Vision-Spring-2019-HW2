@@ -70,16 +70,16 @@ def train(model, criterion, optimizer, scheduler, train_dataloader, val_dataload
         loss_list.append(val_loss)
         
         logger.info("*** Train set - Average loss: {:.4f}".format(train_loss))
-        logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))
+        logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
         
         if epoch > 20:
             mean_ap = test_map(model, criterion, val_dataloader, device, grid_num=7)
             mean_aps.append((epoch, mean_ap))
         
-        if epoch == 5:
+        if epoch == 10:
             utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
         
-        if epoch == 15:
+        if epoch == 20:
             utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
         
         if (epoch >= 30) and (epoch % 5 == 0):

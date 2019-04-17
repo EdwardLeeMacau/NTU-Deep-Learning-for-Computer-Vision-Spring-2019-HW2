@@ -42,10 +42,16 @@ def loadCheckpoint(checkpoint_path: str, model: nn.Module, optimizer: optim, sch
 
     return model, optimizer, resume_epoch, scheduler
 
+def saveModel(checkpoint_path: str, model: nn.Module):
+    state = {
+        'state_dict': model.state_dict(),
+    }
+    torch.save(state, checkpoint_path)
+    print('model saved to %s' % checkpoint_path)
+
 def loadModel(checkpoint_path: str, model: nn.Module):
     state = torch.load(checkpoint_path)
     model.load_state_dict(state['state_dict'])
-    # optimizer.load_state_dict(state['optimizer'])
     print('Model loaded from %s' % checkpoint_path)
 
     return model
