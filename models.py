@@ -80,22 +80,6 @@ class YoloLoss(nn.Module):
         """
         tensor1 = tensor1.type(torch.float)
         tensor2 = tensor2.type(torch.float)
-        # print("Tensor1.shape: {}".format(tensor1.shape))
-
-        # boxes_predict_xy = torch.zeros_like(boxes_predict)
-        # boxes_target_xy  = torch.zeros_like(boxes_target)
-        
-        # boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / self.grid_num - 0.5 * boxes_predict[:, 2:4]
-        # boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / self.grid_num + 0.5 * boxes_predict[:, 2:4]
-        # boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / self.grid_num - 0.5 * boxes_predict[:, 7:9]
-        # boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / self.grid_num + 0.5 * boxes_predict[:, 7:9]
-        # boxes_predict_xy[:, 4], boxes_predict_xy[:, 9] = boxes_predict[:, 4], boxes_predict[:, 9]
-
-        # boxes_target_xy[:,  :2] = boxes_target[:,  :2] / self.grid_num - 0.5 * boxes_target[:, 2:4]
-        # boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / self.grid_num + 0.5 * boxes_target[:, 2:4]
-        # boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / self.grid_num - 0.5 * boxes_target[:, 7:9]
-        # boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / self.grid_num + 0.5 * boxes_target[:, 7:9]
-        # boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
 
         num_bbox = tensor1.shape[0]
 
@@ -140,6 +124,17 @@ class YoloLoss(nn.Module):
 
         return iou
 
+    def xyhw_xyxy(self, tensor: torch.tensor):
+        tensor_xy = torch.zeros_like(tensor)
+        
+        tensor_xy[:,  :2] = tensor[:,  :2] / self.grid_num - 0.5 * tensor[:, 2:4]
+        tensor_xy[:, 2:4] = tensor[:,  :2] / self.grid_num + 0.5 * tensor[:, 2:4]
+        tensor_xy[:, 5:7] = tensor[:, 5:7] / self.grid_num - 0.5 * tensor[:, 7:9]
+        tensor_xy[:, 7:9] = tensor[:, 5:7] / self.grid_num + 0.5 * tensor[:, 7:9]
+        tensor_xy[:, 4], tensor_xy[:, 9] = tensor[:, 4], tensor[:, 9]
+
+        return tensor_xy
+
     def forward(self, output: torch.tensor, target: torch.tensor):
         """
         Default using cuda speedup.
@@ -177,21 +172,9 @@ class YoloLoss(nn.Module):
         # 2. Compute the loss of containing object
         boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
         boxes_target  = coord_target[:, :10]        # Match "delta_xy" in dataset.py
-        boxes_predict_xy = torch.zeros_like(boxes_predict)
-        boxes_target_xy  = torch.zeros_like(boxes_target)
         
-        boxes_predict_xy[:,  :2] = boxes_predict[:,  :2] / self.bbox_num - 0.5 * boxes_predict[:, 2:4]
-        boxes_predict_xy[:, 2:4] = boxes_predict[:,  :2] / self.bbox_num + 0.5 * boxes_predict[:, 2:4]
-        boxes_predict_xy[:, 5:7] = boxes_predict[:, 5:7] / self.bbox_num - 0.5 * boxes_predict[:, 7:9]
-        boxes_predict_xy[:, 7:9] = boxes_predict[:, 5:7] / self.bbox_num + 0.5 * boxes_predict[:, 7:9]
-        boxes_predict_xy[:, 4], boxes_predict_xy[:, 9] = boxes_predict[:, 4], boxes_predict[:, 9]
-
-        boxes_target_xy[:,  :2] = boxes_target[:,  :2] / self.bbox_num - 0.5 * boxes_target[:, 2:4]
-        boxes_target_xy[:, 2:4] = boxes_target[:,  :2] / self.bbox_num + 0.5 * boxes_target[:, 2:4]
-        boxes_target_xy[:, 5:7] = boxes_target[:, 5:7] / self.bbox_num - 0.5 * boxes_target[:, 7:9]
-        boxes_target_xy[:, 7:9] = boxes_target[:, 5:7] / self.bbox_num + 0.5 * boxes_target[:, 7:9]
-        boxes_target_xy[:, 4], boxes_target_xy[:, 9] = boxes_target[:, 4], boxes_target[:, 9]
-        
+        boxes_predict_xy = self.xyhw_xyxy(boxes_predict)
+        boxes_target_xy = self.xyhw_xyxy(boxes_target)
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
         # print("IoU: {}".format(iou))
         # print("IoU.shape: {}".format(iou.shape))
@@ -206,12 +189,12 @@ class YoloLoss(nn.Module):
         # print("max_index: {}".format(max_index.dtype))
 
         # Response Mask: the mask that notes the box need to calculate position loss.
-        coord_response_mask = torch.zeros((iou_max.shape[0], 2), dtype=torch.uint8)
-        coord_response_mask[max_index, 1] = 1
-        coord_response_mask[min_index, 0] = 1
+        response_mask = torch.zeros((iou_max.shape[0], 2), dtype=torch.uint8)
+        response_mask[max_index, 1] = 1
+        response_mask[min_index, 0] = 1
         # coord_response_mask = coord_response_mask.view(-1, 2)
-        coord_response_mask = coord_response_mask.view(-1)
-        coord_not_response_mask = coord_response_mask.le(0)
+        response_mask = response_mask.view(-1)
+        not_response_mask = response_mask.le(0)
         # print("coord_response_mask.shape: {}".format(coord_response_mask.shape))
         # print("coord_response_mask: {}".format(coord_response_mask))
         # print("coord_not_response_mask.shape: {}".format(coord_not_response_mask.shape))
@@ -219,13 +202,13 @@ class YoloLoss(nn.Module):
 
         boxes_predict = boxes_predict.contiguous().view(-1, 5)
         boxes_target_iou = boxes_target.type(torch.float).contiguous().view(-1, 5)
-        boxes_target_iou[coord_response_mask, 4]     = iou_max
-        boxes_target_iou[coord_not_response_mask, 4] = 0
+        boxes_target_iou[response_mask, 4] = iou_max
+        boxes_target_iou[not_response_mask, 4] = 0
         # print("boxes_target_iou.shape: {}".format(boxes_target_iou.shape))
         # print("boxes_target_iou: {}".format(boxes_target_iou))
 
-        boxes_predict_response = boxes_predict[coord_response_mask]
-        boxes_target_response  = boxes_target_iou[coord_response_mask]
+        boxes_predict_response = boxes_predict[response_mask]
+        boxes_target_response  = boxes_target_iou[response_mask]
         # print("Boxes_predict_response.shape: {}".format(boxes_predict_response.shape))
         # print("Boxes_target_response.shape: {}".format(boxes_predict_response.shape))
         # print("Boxes_predict_response: {}".format(boxes_predict_response))
@@ -240,10 +223,8 @@ class YoloLoss(nn.Module):
                          F.mse_loss(torch.sqrt(boxes_predict_response[:, 2:4]), torch.sqrt(boxes_target_response[:, 2:4]), size_average=False))
         
         # 2.2 not response loss, set the gt of the confidence as 0
-        boxes_predict_not_response = boxes_predict[coord_not_response_mask]
-        boxes_target_not_response  = boxes_target_iou[coord_not_response_mask]
-        # boxes_target_not_response[:, 4] = 0
-        # boxes_target_not_response[:, 9] = 0
+        boxes_predict_not_response = boxes_predict[not_response_mask]
+        boxes_target_not_response  = boxes_target_iou[not_response_mask]
 
         # print("noobj_confidence_loss: {}".format(self.lambda_noobj * F.mse_loss(boxes_predict_not_response[:, 4], boxes_target_not_response[:, 4], size_average=False)))
         """ Class 5: Not_response_loss """
