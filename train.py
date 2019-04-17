@@ -43,7 +43,7 @@ def train(model, criterion, optimizer, scheduler, train_dataloader, val_dataload
     mean_aps  = []
     # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[25, 40, 60], gamma=0.1)
 
-    for epoch in range(start_epochs, epochs + 1):
+    for epoch in range(start_epochs + 1, epochs + 1):
         model.train()
         scheduler.step()
 
@@ -126,7 +126,7 @@ def main():
     start = time.time()
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
-    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=False, transform=transforms.Compose([
+    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -147,7 +147,7 @@ def main():
         model = models.Yolov1_vgg16bn(pretrained=True).to(device)
         criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 40, 50], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
         start_epoch = 0
 
         if args.load:
@@ -165,7 +165,7 @@ def main():
         model_improve = models.Yolov1_vgg16bn(pretrained=True).to(device)
         criterion = models.YoloLoss(14, 2, 5, 0.5, device).to(device)
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 40, 50], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
         start_epoch = 0
         
         if args.load:
@@ -177,14 +177,14 @@ def main():
         model = models.Yolov1_vgg16bn(pretrained=True).to(device)
         criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 40, 50], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
         start_epoch = 0
         model, loss_list, mean_aps = train(model, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7)
 
         model_improve = models.Yolov1_vgg16bn(pretrained=True).to(device)
         criterion = models.YoloLoss(14, 2, 5, 0.5, device).to(device)
         optimizer = optim.Adam(model_improve.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [25, 40, 50], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
         start_epoch = 0
         model_improve, loss_list, mean_aps = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=14)
 

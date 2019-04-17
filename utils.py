@@ -26,7 +26,7 @@ def saveCheckpoint(checkpoint_path, model, optimizer, scheduler: optim.lr_schedu
     state = {
         'state_dict': model.state_dict(),
         'optimizer' : optimizer.state_dict(),
-        'epoch': epoch + 1,
+        'epoch': epoch,
         'scheduler': scheduler.state_dict()
     }
     torch.save(state, checkpoint_path)

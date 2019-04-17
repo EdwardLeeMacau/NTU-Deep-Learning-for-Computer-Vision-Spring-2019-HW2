@@ -29,7 +29,7 @@ classnames = utils.classnames
 labelEncoder  = utils.labelEncoder
 oneHotEncoder = utils.oneHotEncoder
 
-def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2, class_num=16):
+def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2, class_num=16):
     """
     Args:
       output: [batch_size, grid_num, grid_num, 5 * bbox_num + class_num]
@@ -93,9 +93,12 @@ def decode(output: torch.Tensor, prob_min=0.1, iou_threshold=0.5, grid_num=7, bb
 
     # Prevent the boxes go outside the image, so clamped the xy coordinate to 0-1
     boxes = boxes.clamp(min=0., max=1.)
-    keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
+    
+    if nms:
+        keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
+        return boxes[keep_index], classIndexs[keep_index], probs[keep_index]
 
-    return boxes[keep_index], classIndexs[keep_index], probs[keep_index]
+    return boxes, classIndexs, probs
 
 def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold):
     """
@@ -282,7 +285,7 @@ def main():
         data, target = data.to(device), target.to(device)
         
         output = model(data)
-        boxes, classIndexs, probs = decode(output, prob_min=args.prob, iou_threshold=args.iou)
+        boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou)
         
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
         # print("ClassIndexs: {}".format(classIndexs))
@@ -306,6 +309,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="Set the initial learning rate")
     parser.add_argument("--worker", default=4, type=int)
+    parser.add_argument("--nms", type=bool)
     parser.add_argument("--iou", default=0.5, type=float, help="NMS iou_threshold")
     parser.add_argument("--prob", default=0.1, type=float, help="NMS prob_min, pick up the bbox with the class_prob > prob_min")
     subparsers = parser.add_subparsers(required=True, dest="command")
