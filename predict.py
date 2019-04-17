@@ -57,9 +57,11 @@ def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid
     mask1 = (contain > prob_min)
     mask2 = (contain == contain.max())
     mask  = (mask1 + mask2).gt(0)
-    # print(mask[3, 3])
-    # print("Mask.shape: {}".format(mask.shape))
+    # print("Conf.max: {}".format(contain.max().item()))
+    # print("Contain[mask]: {}".format(contain[mask]))
 
+    # i: Row message
+    # j: Column message
     for i in range(grid_num):
         for j in range(grid_num):
             for b in range(bbox_num):
@@ -68,6 +70,7 @@ def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid
                     contain_prob = output[i, j, b*5+4].type(torch.float)
                         
                     # Recover the base of xy as image_size
+                    # xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
                     xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
 
                     box[:2] = box[:2] * cell_size + xy
@@ -75,6 +78,10 @@ def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid
                     box_xy[:2] = box[:2] - 0.5 * box[2:]
                     box_xy[2:] = box[:2] + 0.5 * box[2:]                        
                     max_prob, classIndex = torch.max(output[i, j, 10:], 0)
+                    
+                    # print("Max_Prob: {}".format(max_prob))
+                    # print("Contain_prob: {}".format(contain_prob))
+                    pdb.set_trace()
 
                     if float((contain_prob * max_prob).item()) > prob_min:
                         classIndex = classIndex.unsqueeze(0)
