@@ -22,19 +22,25 @@ def selectDevice(show=False):
 
     return device
 
-def saveCheckpoint(checkpoint_path, model, optimizer):
-    state = {'state_dict': model.state_dict(),
-             'optimizer' : optimizer.state_dict()}
+def saveCheckpoint(checkpoint_path, model, optimizer, scheduler: optim.lr_scheduler.MultiStepLR, epoch):
+    state = {
+        'state_dict': model.state_dict(),
+        'optimizer' : optimizer.state_dict(),
+        'epoch': epoch + 1,
+        'scheduler': scheduler.state_dict()
+    }
     torch.save(state, checkpoint_path)
     print('model saved to %s' % checkpoint_path)
 
-def loadCheckpoint(checkpoint_path: str, model: nn.Module, optimizer: optim):
+def loadCheckpoint(checkpoint_path: str, model: nn.Module, optimizer: optim, scheduler: optim.lr_scheduler.MultiStepLR):
     state = torch.load(checkpoint_path)
+    resume_epoch = state['epoch']
     model.load_state_dict(state['state_dict'])
     optimizer.load_state_dict(state['optimizer'])
+    scheduler.load_state_dict(state['scheduler'])
     print('model loaded from %s' % checkpoint_path)
 
-    return model, optimizer
+    return model, optimizer, resume_epoch, scheduler
 
 def loadModel(checkpoint_path: str, model: nn.Module):
     state = torch.load(checkpoint_path)
