@@ -128,8 +128,8 @@ class YoloLoss_github(nn.Module):
         noo_pred_mask[:,4] = 1
         noo_pred_mask[:,9] = 1
         noo_pred_c = noo_pred[noo_pred_mask] #noo pred只需要计算 c 的损失 size[-1,2]
-        noo_target_c = noo_target[noo_pred_mask]
-        nooobj_loss = F.mse_loss(noo_pred_c,noo_target_c,size_average=False)
+        noo_target_c = noo_target[noo_pred_mask].type(torch.float)
+        nooobj_loss = F.mse_loss(noo_pred_c, noo_target_c, size_average=False)
 
         # compute contain obj loss
         coo_response_mask = torch.ByteTensor(box_target.size())
@@ -157,17 +157,18 @@ class YoloLoss_github(nn.Module):
             box_target_iou[i+max_index,torch.LongTensor([4])] = (max_iou).data
 
         box_target_iou = Variable(box_target_iou)
+
         #1.response loss
         box_pred_response = box_pred[coo_response_mask].view(-1,5)
-        box_target_response_iou = box_target_iou[coo_response_mask].view(-1,5)
-        box_target_response = box_target[coo_response_mask].view(-1,5)
+        box_target_response_iou = box_target_iou[coo_response_mask].type(torch.float).cuda().view(-1,5)
+        box_target_response = box_target[coo_response_mask].type(torch.float).cuda().view(-1,5)
         contain_loss = F.mse_loss(box_pred_response[:,4],box_target_response_iou[:,4],size_average=False)
         loc_loss = (F.mse_loss(box_pred_response[:,:2],box_target_response[:,:2],size_average=False) + 
                     F.mse_loss(torch.sqrt(box_pred_response[:,2:4]),torch.sqrt(box_target_response[:,2:4]),size_average=False))
 
         #2.not response loss
         box_pred_not_response = box_pred[coo_not_response_mask].view(-1,5)
-        box_target_not_response = box_target[coo_not_response_mask].view(-1,5)
+        box_target_not_response = box_target[coo_not_response_mask].type(torch.float).cuda().view(-1,5)
         box_target_not_response[:, 4] = 0
         #not_contain_loss = F.mse_loss(box_pred_response[:,4],box_target_response[:,4],size_average=False)
         
@@ -175,7 +176,7 @@ class YoloLoss_github(nn.Module):
         not_contain_loss = F.mse_loss(box_pred_not_response[:,4], box_target_not_response[:,4],size_average=False)
 
         #3.class loss
-        class_loss = F.mse_loss(class_pred,class_target,size_average=False)
+        class_loss = F.mse_loss(class_pred, class_target.type(torch.float).cuda(), size_average=False)
 
         # print("Class_loss: {}".format(class_loss))
         # print("No_object_loss: {}".format(nooobj_loss.item()))
