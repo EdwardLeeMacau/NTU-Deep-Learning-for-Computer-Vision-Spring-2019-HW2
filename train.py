@@ -33,11 +33,8 @@ classnames    = utils.classnames
 labelEncoder  = utils.labelEncoder
 oneHotEncoder = utils.oneHotEncoder
 
-def train(model, criterion, optimizer, scheduler, train_dataloader, val_dataloader, start_epochs, epochs, device, grid_num=7, lr=0.001, log_interval=10, save_name="Yolov1"):
-    # optimizer = optim.Adam(model.parameters(), lr=lr)
-    # criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)    
+def train(model, criterion, optimizer, scheduler, train_loader, val_loader, start_epochs, epochs, device, grid_num=7, lr=0.001, log_interval=10, save_name="Yolov1"):
     model.train()
-    # iteration = 0
     
     loss_list = []
     mean_aps  = []
@@ -50,7 +47,7 @@ def train(model, criterion, optimizer, scheduler, train_dataloader, val_dataload
         iteration = 0
         train_loss = 0
 
-        for batch_idx, (data, target, _) in enumerate(train_dataloader, 1):
+        for batch_idx, (data, target, _) in enumerate(train_loader, 1):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -62,18 +59,18 @@ def train(model, criterion, optimizer, scheduler, train_dataloader, val_dataload
             optimizer.step()
 
             if (iteration % log_interval == 0):
-                logger.info("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(epoch, batch_idx * len(data), len(train_dataloader.dataset), 100. * batch_idx / len(train_dataloader), loss.item()))
+                logger.info("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(epoch, batch_idx * len(data), len(train_loader.dataset), 100. * batch_idx / len(train_loader), loss.item()))
             iteration += 1
         
         train_loss /= iteration
-        val_loss = test_loss(model, criterion, val_dataloader, device)
+        val_loss = test_loss(model, criterion, val_loader, device)
         loss_list.append(val_loss)
         
         logger.info("*** Train set - Average loss: {:.4f}".format(train_loss))
         logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
         
         if epoch > 20:
-            mean_ap = test_map(model, criterion, val_dataloader, device, grid_num=7)
+            mean_ap = test_map(model, criterion, val_loader, device, grid_num=7)
             mean_aps.append((epoch, mean_ap))
         
         if epoch == 10:
@@ -111,22 +108,19 @@ def test_map(model, criterion, dataloader: DataLoader, device, grid_num):
             data, target = data.to(device), target.to(device)
             output = model(data)
 
-            boxes, classIndexs, probs = predict.decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=grid_num, bbox_num=2)
+            boxes, classIndexs, probs = predict.decode(output, prob_min=args.prob, iou_threshold=args.iou, grid_num=grid_num, bbox_num=2)
             classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
             predict.export(boxes, classNames, probs, labelNames[0], outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
         
         classaps, mean_ap = evaluation.scan_map()
 
-        logger.info("*** Test set - MAP: {:.4f}".format(mean_ap))
-        logger.info("*** Test set - AP: {}".format(classaps))
-    
     return mean_ap
 
 def main():
     start = time.time()
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
-    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
+    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=args.augment, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -148,7 +142,7 @@ def main():
         # criterion = models.YoloLoss(7., 2., 5., 0.5, device).to(device)
         criterion = models.YoloLoss_github(7., 2., 5., 0.5).to(device)
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 60], gamma=0.1)
         start_epoch = 0
 
         if args.load:
@@ -198,8 +192,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--load", type=str, help="Reload the model")
-    parser.add_argument("--iou", type=str)
-    parser.add_argument("--prob", type=str)
+    parser.add_argument("--augment", type=bool, default=False, help="Open the augment function")
+    parser.add_argument("--iou", type=float, default=0.5)
+    parser.add_argument("--prob", type=float, default=0.05)
     subparsers = parser.add_subparsers(required=True, dest="command")
 
     basic_parser = subparsers.add_parser("basic")
