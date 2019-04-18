@@ -86,17 +86,20 @@ class MyDataset(Dataset):
         i, j = ij[:, 0], ij[:, 1]
         
         # Confidence
-        target[j, i, 4] = 1
-        target[j, i, 9] = 1
-        target[j, i, classindex + 10] = 1
+        for (i, j) in ij:
+            target[j, i] = 0    # Reset as zero
+            
+            target[j, i, 4] = 1
+            target[j, i, 9] = 1
+            target[j, i, classindex + 10] = 1
 
-        # Coordinate transform to xyhw
-        cornerXY = ij * cell_size
-        deltaXY  = (centerXY - cornerXY) / cell_size
-        target[j, i, 2:4] = wh
-        target[j, i,  :2] = deltaXY
-        target[j, i, 7:9] = wh
-        target[j, i, 5:7] = deltaXY
+            # Coordinate transform to xyhw
+            cornerXY = ij * cell_size
+            deltaXY  = (centerXY - cornerXY) / cell_size
+            target[j, i, 2:4] = wh
+            target[j, i,  :2] = deltaXY
+            target[j, i, 7:9] = wh
+            target[j, i, 5:7] = deltaXY
 
         # Target in numpy
         return target

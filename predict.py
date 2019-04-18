@@ -81,7 +81,7 @@ def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid
                     
                     # print("Max_Prob: {}".format(max_prob))
                     # print("Contain_prob: {}".format(contain_prob))
-                    pdb.set_trace()
+                    # pdb.set_trace()
 
                     if float((contain_prob * max_prob).item()) > prob_min:
                         classIndex = classIndex.unsqueeze(0)

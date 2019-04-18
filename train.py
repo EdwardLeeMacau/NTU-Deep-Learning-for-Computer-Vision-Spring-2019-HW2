@@ -145,8 +145,8 @@ def main():
 
     if args.command == "basic":
         model = models.Yolov1_vgg16bn(pretrained=True).to(device)
-        # criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
-        criterion = models.YoloLoss_github(7, 2, 5, 0.5).to(device)
+        # criterion = models.YoloLoss(7., 2., 5., 0.5, device).to(device)
+        criterion = models.YoloLoss_github(7., 2., 5., 0.5).to(device)
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
         start_epoch = 0
