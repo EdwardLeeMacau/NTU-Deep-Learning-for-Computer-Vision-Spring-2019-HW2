@@ -54,14 +54,30 @@ class MyDataset(Dataset):
         boxes, classIndexs = self.readtxt(labelName)
         
         if self.train:
+            pass
+
+            # image_2, boxes_2 = self.HorizontalFlip(image, boxes)
+            # image_3, boxes_3 = self.VerticalFlip(image, boxes)
+        
             image = self.RandomAdjustHSV(image, 0.9, 1.1)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
             if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
-
+            
         target = self.encoder(boxes, classIndexs, image.size)
         target = torch.from_numpy(target)
-
-        if self.transform: image = self.transform(image)
+        # target_2 = self.encoder(boxes_2), classIndexs, image.size)
+        # target_2 = torch.from_numpy(target_2)
+        # target_3 = self.encoder(boxes_3, classIndexs, image.size)
+        # target_3 = torch.from_numpy(target_3)
+        
+        if self.transform: 
+            image = self.transform(image)
+            # image_2 = self.transform(image_2)
+            # image_3 = self.transform(image_3)
+        
+        # images = torch.cat((image.unsqueeze(0), image_2.unsqueeze(0), image_3.unsqueeze(0)), dim=0)
+        # targets = torch.cat((target.unsqueeze(0), target_2.unsqueeze(0), target_3.unsqueeze(0)), dim=0)
+        # return images, target
         return image, target, labelName
 
     def encoder(self, boxes, classindex, image_size):
@@ -83,11 +99,24 @@ class MyDataset(Dataset):
         centerXY  = (boxes[:, 2:] + boxes[:, :2]) / 2
        
         ij = (np.ceil(centerXY / cell_size) - 1).astype(int)
-        i, j = ij[:, 0], ij[:, 1]
         
+        """
+        i, j = ij[:, 0], ij[:, 1]
+        target[j, i, 4] = 1
+        target[j, i, 9] = 1
+        target[j, i, classindex + 10] = 1
+
+        cornerXY = ij * cell_size
+        deltaXY  = (centerXY - cornerXY) / cell_size
+        target[j, i, 2:4] = wh
+        target[j, i,  :2] = deltaXY
+        target[j, i, 7:9] = wh
+        target[j, i, 5:7] = deltaXY
+        """
+
         # Confidence
         for index, (i, j) in enumerate(ij):
-            print("Index: {}, i: {}, j: {}".format(index, i, j))
+            # print("Index: {}, i: {}, j: {}".format(index, i, j))
             target[j, i] = 0    # Reset as zero
             
             target[j, i, 4] = 1
@@ -118,6 +147,8 @@ class MyDataset(Dataset):
         """
         with open(labelName, "r") as textfile:
             labels = textfile.readlines()
+            # for label in labels:
+            #     print(label)
             labels = np.asarray("".join(labels).replace("\n", " ").strip().split()).reshape(-1, 10)
 
         classNames  = np.asarray(labels[:, 8])
@@ -185,29 +216,68 @@ class MyDataset(Dataset):
 
         return im, boxes
 
-def dataset_unittest():
-    trainset = MyDataset(root="hw2_train_val/train15000", size=15000, transform=transforms.Compose([
-        transforms.Resize((448, 448)), 
-        transforms.ToTensor()
-    ]))
+class Testset(Dataset):
+    def __init__(self, img_root, grid_num=7, bbox_num=2, class_num=16, transform=None):
+        """ 
+        Save the imageNames and the labelNames and read in future.
+        """
+        self.filenames = []
+        self.img_root  = img_root
+        self.transform = transform
+        self.grid_num  = grid_num
+        self.bbox_num  = bbox_num
+        self.class_num = class_num
 
-    testset  = MyDataset(root="hw2_train_val/test1500", train=False, size=1500, transform=transforms.Compose([
+        self.filenames = os.listdir(img_root)
+        self.len = len(self.filenames)
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, index):
+        imageName = os.path.join(self.img_root, self.filenames[index])
+
+        image = Image.open(imageName)
+
+        if self.transform: 
+            image = self.transform(image)
+        
+        return image, self.filenames[index].split(".")[0]
+
+def augment_unittest():
+    from predict import decode, labelEncoder
+
+    trainset = MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
         transforms.Resize((448, 448)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ]))
-
-    trainset_loader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=4)
-    testset_loader  = DataLoader(testset, batch_size=1500, shuffle=False, num_workers=4)
     
-    # Read data time testing
-    train_iter = iter(trainset_loader)
+    train_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=0)
 
-    start = time.time()
-    for i in range(0, 1):  
-        img, target, _ = next(train_iter)
-        print(img)
-    end = time.time()
-    print("Using time: {:.4f}".format(end - start))
+    for _, target, _ in train_loader:
+        boxes, classIndexs, probs = decode(target, nms=True, prob_min=0.1, iou_threshold=0.5)
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long))
 
-if __name__ == '__main__':
-    dataset_unittest()
+        boxes = (boxes * 512).round()
+        rect  = torch.zeros(boxes.shape[0], 8)
+
+        # Extand (x1, y1, x2, y2) to (x1, y1, x2, y1, x2, y2, x1, y2)
+        rect[:,  :3] = boxes[:, :3]
+        rect[:, 3:6] = boxes[:, 1:]
+        rect[:, 6]   = boxes[:, 0]
+        rect[:, 7]   = boxes[:, 3]
+
+        # Return the probs to string lists
+        round_func = lambda x: round(x, 3)
+        probs = list(map(str, list(map(round_func, probs.data.tolist()))))
+        classNames = list(map(str, classNames))
+
+        for i in range(0, rect.shape[0]):
+            prob = probs[i]
+            className = classNames[i]
+
+            print(rect[i], className, prob)
+
+if __name__ == "__main__":
+    augment_unittest()

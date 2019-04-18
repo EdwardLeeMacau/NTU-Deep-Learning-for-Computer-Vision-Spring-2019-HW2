@@ -18,8 +18,9 @@ from PIL import Image
 
 import numpy as np
 
+import improve_models
 import models
-from dataset import MyDataset
+import dataset
 import utils
 
 logging.config.fileConfig("logging.ini")
@@ -70,7 +71,7 @@ def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid
                     contain_prob = output[i, j, b*5+4].type(torch.float)
                         
                     # Recover the base of xy as image_size
-                    # xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
+                    # xy = torch.tensor([j, i], dtype=torch.float).unsqueeze(0) * cell_size
                     xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
 
                     box[:2] = box[:2] * cell_size + xy
@@ -173,6 +174,7 @@ def export(boxes, classNames, probs, labelName, outputpath, image_size=512.):
     probs = list(map(str, list(map(round_func, probs.data.tolist()))))
     classNames = list(map(str, classNames))
 
+    # with open(os.path.join(outputpath, labelName.split("\\")[-1]), "w") as textfile:
     with open(os.path.join(outputpath, labelName.split("/")[-1]), "w") as textfile:
         for i in range(0, rect.shape[0]):
             prob = probs[i]
@@ -209,7 +211,7 @@ def encoder_unittest():
     print("*** reverse classnames: \n{}".format(reverse_classnames))
     
 def system_unittest():
-    dataset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
+    dataset  = dataset.MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor()
     ]))
@@ -256,41 +258,52 @@ def main():
     4.  MAP calculation. 
     """
     
-    start = time.time()
+    # start = time.time()
 
     torch.set_default_dtype(torch.float)
     device = utils.selectDevice()
 
-    model = models.Yolov1_vgg16bn(pretrained=True).to(device)
+    if args.command == "basic":
+        model = models.Yolov1_vgg16bn(pretrained=True).to(device)
+    elif args.command == "improve":
+        model = models.Yolov1_vgg16bn_Improve(pretrained=True).to(device)
+
     model = utils.loadModel(args.model, model)
     model.eval()
     
-    trainset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
+    # trainset = MyDataset(root="hw2_train_val/train15000", size=15000, train=False, transform=transforms.Compose([
+    #     transforms.Resize((448, 448)),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # ]))
+
+    # validationset = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
+    #     transforms.Resize((448, 448)),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # ]))
+
+    testset  = dataset.Testset(img_root=args.images, transform=transforms.Compose([
         transforms.Resize((448, 448)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ]))
 
-    testset  = MyDataset(root="hw2_train_val/val1500", train=False, size=1500, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor()
-    ]))
-
-    trainset_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=args.worker)
-    testset_loader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
+    # train_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=args.worker)
+    # val_loader = DataLoader(validationset, batch_size=1, shuffle=False, num_workers=args.worker)
+    test_loader = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
 
     # Return the imageName for storing the predict_msg
-    if not os.path.exists(args.output):
-        os.mkdir(args.output)
+    if not os.path.exists(args.output): os.mkdir(args.output)
 
-    if args.command == "train":
-        loader = trainset_loader
-    elif args.command == "val":
-        loader = testset_loader
+    # if args.command == "train":
+    #     loader = train_loader
+    # elif args.command == "val":
+    #     loader = testset_loader
 
-    # Testset prediction
-    for batch_idx, (data, target, labelName) in enumerate(loader, 1):
-        data, target = data.to(device), target.to(device)
-        
+    # for batch_idx, (data, labelName) in enumerate(loader, 1):
+    for batch_idx, (data, imgName) in enumerate(test_loader, 1):
+        data = data.to(device)
         output = model(data)
         boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou)
         
@@ -298,12 +311,13 @@ def main():
         # print("ClassIndexs: {}".format(classIndexs))
         # print("ClassNames: {}".format(classNames))
 
-        export(boxes, classNames, probs, labelName[0], args.output)
+        export(boxes, classNames, probs, imgName + "txt", args.output)
+        
         if batch_idx % 100 == 0:
-            print(batch_idx)
-
-    end = time.time()
-    logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
+            print("Predicted: [{}/{} ({:.0f}%)]".format(batch_idx, len(test_loader.dataset), 100. * batch_idx / len(test_loader.dataset)))
+            
+    # end = time.time()
+    # logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
     # decode_unittest()
@@ -311,21 +325,24 @@ if __name__ == "__main__":
     # system_unittest()
     # raise NotImplementedError
 
-    os.system("clear")
+    # os.system("clear")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, required=True, help="Set the initial learning rate")
-    parser.add_argument("--worker", default=4, type=int)
-    parser.add_argument("--nms", type=bool)
+    parser.add_argument("--model", type=str, required=True, help="Set the trained model")
+    parser.add_argument("--worker", default=0, type=int)
+    parser.add_argument("--images", type=str)
+    parser.add_argument("--output", type=str)
+    parser.add_argument("--nms", action="store_true", help="Open nms")
     parser.add_argument("--iou", default=0.5, type=float, help="NMS iou_threshold")
     parser.add_argument("--prob", default=0.1, type=float, help="NMS prob_min, pick up the bbox with the class_prob > prob_min")
+    
     subparsers = parser.add_subparsers(required=True, dest="command")
-    
-    train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("--output", default="hw2_train_val/train15000/labelTxt_hbb_pred")
-    
-    val_parser = subparsers.add_parser("val")
-    val_parser.add_argument("--output", default="hw2_train_val/val1500/labelTxt_hbb_pred")
+    # train_parser = subparsers.add_parser("train")
+    # train_parser.add_argument("--output", default="hw2_train_val/train15000/labelTxt_hbb_pred")
+    # val_parser = subparsers.add_parser("val")
+    # val_parser.add_argument("--output", default="hw2_train_val/val1500/labelTxt_hbb_pred")
+    basic_parser = subparsers.add_parser("basic")
+    improve_parser = subparsers.add_parser("improve")
 
     args = parser.parse_args()
 

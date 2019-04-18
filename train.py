@@ -8,17 +8,18 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
-import glob
+# import glob
 import os
 import time
 import argparse
+import math
 import logging
 import logging.config
-from PIL import Image
+# from PIL import Image
 
 import numpy as np
 import matplotlib.pyplot as plt
-import skimage
+# import skimage
 
 import models
 import utils
@@ -36,27 +37,49 @@ oneHotEncoder = utils.oneHotEncoder
 def train(model, criterion, optimizer, scheduler, train_loader, val_loader, start_epochs, epochs, device, grid_num=7, lr=0.001, log_interval=10, save_name="Yolov1"):
     model.train()
     
-    loss_list = []
-    mean_aps  = []
-    # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[25, 40, 60], gamma=0.1)
+    epochs_list     = []
+    train_loss_list = []
+    val_loss_list   = []
+    val_mean_aps    = []
+
+    # lr_trace = [1e-3]
+    
+    # lr_min = 1e-4
+    # lr_max = 1e-3
+    # T_cur  = 0
+    # T_max  = 500
+    # T_mult = 1
 
     for epoch in range(start_epochs + 1, epochs + 1):
         model.train()
-        scheduler.step()
+        
+        if scheduler: 
+            scheduler.step()
 
         iteration = 0
         train_loss = 0
 
+        # Train and backpropagation
         for batch_idx, (data, target, _) in enumerate(train_loader, 1):
             data, target = data.to(device), target.to(device)
+
+            # lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(T_cur / T_max * math.pi))
+            # lr_trace.append(lr)
+            # optimizer = utils.set_optimizer_lr(optimizer, lr)            
+            
             optimizer.zero_grad()
             output = model(data)
             loss = criterion(output, target)
             loss.backward()
+            optimizer.step()
+
+            # T_cur += 1
+            # if T_cur > T_max:
+            #     logger.info("Learning rate reset.")
+            #     T_cur -= T_max
+            #     T_max *= T_mult
 
             train_loss += loss.item()
-            
-            optimizer.step()
 
             if (iteration % log_interval == 0):
                 logger.info("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(epoch, batch_idx * len(data), len(train_loader.dataset), 100. * batch_idx / len(train_loader), loss.item()))
@@ -64,26 +87,41 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         
         train_loss /= iteration
         val_loss = test_loss(model, criterion, val_loader, device)
-        loss_list.append(val_loss)
+        
+        epochs_list.append(epoch)
+        train_loss_list.append(train_loss)
+        val_loss_list.append(val_loss)
         
         logger.info("*** Train set - Average loss: {:.4f}".format(train_loss))
         logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
         
-        if epoch > 20:
+        if epoch >= 20:
             mean_ap = test_map(model, criterion, val_loader, device, grid_num=7)
-            mean_aps.append((epoch, mean_ap))
-        
-        if epoch == 10:
-            utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
-        
-        if epoch == 20:
-            utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
-        
-        if (epoch >= 30) and (epoch % 5 == 0):
-            utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
+            val_mean_aps.append(mean_ap)
+            
+            if mean_ap >= max(val_mean_aps):
+                utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
+        else:
+            val_mean_aps.append(0)
 
-    return model, loss_list, mean_aps
+        plt.clf()
+        plt.plot(epochs_list, train_loss_list, label="Training loss")
+        plt.plot(epochs_list, val_loss_list, label="Validation loss")
+        plt.legend(loc=0)
+        plt.title("Loss vs Epochs")
+        plt.savefig("loss.png")
+        plt.clf()
+        
+        plt.plot(epochs_list, val_mean_aps, label="mAP")
+        plt.legend(loc=0)
+        plt.title("mAP vs Epochs")
+        plt.savefig("mAP.png")
 
+        # if (epoch % 5 == 0):
+        #     utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
+
+    return model 
+    
 def test_loss(model, criterion, dataloader: DataLoader, device):
     model.eval()
     loss = 0
@@ -120,68 +158,60 @@ def main():
     start = time.time()
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
-    trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=args.augment, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]))
 
-    testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]))
+    if args.command == "basic":
+        trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=args.augment, transform=transforms.Compose([
+            transforms.Resize((448, 448)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ]))
+
+        testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
+            transforms.Resize((448, 448)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ]))
+
+    elif args.command == "improve":
+        trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, grid_num=14, train=args.augment, transform=transforms.Compose([
+            transforms.Resize((448, 448)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ]))
+
+        testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, grid_num=14, train=False, transform=transforms.Compose([
+            transforms.Resize((448, 448)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ]))
 
     trainLoader = DataLoader(trainset, batch_size=args.batchs, shuffle=True, num_workers=args.worker)
     testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
-
     device = utils.selectDevice(show=True)
 
     if args.command == "basic":
         model = models.Yolov1_vgg16bn(pretrained=True).to(device)
-        # criterion = models.YoloLoss(7., 2., 5., 0.5, device).to(device)
-        criterion = models.YoloLoss_github(7., 2., 5., 0.5).to(device)
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 60], gamma=0.1)
+        criterion = models.YoloLoss(7., 2., 5., 0.5, device).to(device)
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40], gamma=0.1)
         start_epoch = 0
 
         if args.load:
             model, optimizer, start_epoch, scheduler = utils.loadCheckpoint(args.load, model, optimizer, scheduler)
 
-        model, loss_list, mean_aps = train(model, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7)
-
-        with open("Training_Record.txt", "a") as textfile:
-            textfile.write("Basic Models")
-            textfile.write("Loss: {}".format(str(loss_list)))
-            textfile.write("Mean_aps: {}".format(str(mean_aps)))
-            textfile.write("\n")
+        model = train(model, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7)
 
     elif args.command == "improve":
-        model_improve = models.Yolov1_vgg16bn(pretrained=True).to(device)
-        criterion = models.YoloLoss(14, 2, 5, 0.5, device).to(device)
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
+        model_improve = models.Yolov1_vgg16bn_Improve(pretrained=True).to(device)
+        criterion = models.YoloLoss(14., 2., 5, 0.5, device).to(device)
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40], gamma=0.1)
         start_epoch = 0
         
         if args.load:
             model_improve, optimizer, start_epoch, scheduler = utils.loadCheckpoint(args.load, model, optimizer, scheduler)
 
-        model_improve, loss_list, mean_aps = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=14)
-
-    elif args.command == "both":
-        model = models.Yolov1_vgg16bn(pretrained=True).to(device)
-        criterion = models.YoloLoss(7, 2, 5, 0.5, device).to(device)
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
-        start_epoch = 0
-        model, loss_list, mean_aps = train(model, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7)
-
-        model_improve = models.Yolov1_vgg16bn(pretrained=True).to(device)
-        criterion = models.YoloLoss(14, 2, 5, 0.5, device).to(device)
-        optimizer = optim.Adam(model_improve.parameters(), lr=args.lr)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 50], gamma=0.1)
-        start_epoch = 0
-        model_improve, loss_list, mean_aps = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=14)
+        model_improve = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7)
 
     end = time.time()
     logger.info("*** Training ended.")
@@ -192,28 +222,22 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--load", type=str, help="Reload the model")
-    parser.add_argument("--augment", type=bool, default=False, help="Open the augment function")
+    parser.add_argument("--augment", action="store_true", help="Open the augment function")
     parser.add_argument("--iou", type=float, default=0.5)
     parser.add_argument("--prob", type=float, default=0.05)
     subparsers = parser.add_subparsers(required=True, dest="command")
 
     basic_parser = subparsers.add_parser("basic")
-    basic_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    basic_parser.add_argument("--lr", default=1e-3, type=float, help="Set the initial learning rate")
     basic_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
-    basic_parser.add_argument("--epochs", default=70, type=int, help="Set the epochs")
+    basic_parser.add_argument("--epochs", default=40, type=int, help="Set the epochs")
     basic_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     improve_parser = subparsers.add_parser("improve")
-    improve_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
+    improve_parser.add_argument("--lr", default=1e-3, type=float, help="Set the initial learning rate")
     improve_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
     improve_parser.add_argument("--epochs", default=70, type=int, help="Set the epochs")
     improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
-
-    both_parser = subparsers.add_parser("both")
-    both_parser.add_argument("--lr", default=0.001, type=float, help="Set the initial learning rate")
-    both_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
-    both_parser.add_argument("--epochs", default=70, type=int, help="Set the epochs")
-    both_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     args = parser.parse_args()
     print(args)

@@ -21,8 +21,7 @@ class VGG(nn.Module):
 
         self.yolo = nn.Sequential(
             nn.Linear(25088, 4096),
-            # nn.BatchNorm1d(num_features=4096),
-            nn.LeakyReLU(negative_slope=0.02),
+            nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
             nn.Linear(4096, 1274)
@@ -62,130 +61,60 @@ class VGG(nn.Module):
             if isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
-class YoloLoss_github(nn.Module):
-    def __init__(self, S, B, l_coord, l_noobj):
-        super(YoloLoss_github, self).__init__()
-        self.S = S
-        self.B = B
-        self.l_coord = l_coord
-        self.l_noobj = l_noobj
 
-    def compute_iou(self, box1, box2):
-        '''Compute the intersection over union of two set of boxes, each box is [x1,y1,x2,y2].
-        Args:
-          box1: (tensor) bounding boxes, sized [N,4].
-          box2: (tensor) bounding boxes, sized [M,4].
-        Return:
-          (tensor) iou, sized [N,M].
-        '''
-        N = box1.size(0)
-        M = box2.size(0)
+class VGG_Improve(nn.Module):
+    """
+      input_size  = 448 * 448
+      output_size = 7 * 7 * (5 * 2 + 16) = 1274
+    """
+    def __init__(self, features, output_size=5096, image_size=448):
+        super(VGG_Improve, self).__init__()
+        self.features = features
+        self.image_size = image_size
 
-        lt = torch.max(
-            box1[:,:2].unsqueeze(1).expand(N,M,2),  # [N,2] -> [N,1,2] -> [N,M,2]
-            box2[:,:2].unsqueeze(0).expand(N,M,2),  # [M,2] -> [1,M,2] -> [N,M,2]
+        self.yolo = nn.Sequential(
+            nn.Linear(25088, 8192),
+            # nn.BatchNorm1d(num_features=4096),
+            nn.LeakyReLU(negative_slope=0.02),
+            nn.Dropout(0.5),
+
+            nn.Linear(8192, 5096)
         )
+        self._initialize_weights()
 
-        rb = torch.min(
-            box1[:,2:].unsqueeze(1).expand(N,M,2),  # [N,2] -> [N,1,2] -> [N,M,2]
-            box2[:,2:].unsqueeze(0).expand(N,M,2),  # [M,2] -> [1,M,2] -> [N,M,2]
-        )
-
-        wh = rb - lt  # [N,M,2]
-        wh[wh<0] = 0  # clip at 0
-        inter = wh[:,:,0] * wh[:,:,1]  # [N,M]
-
-        area1 = (box1[:,2]-box1[:,0]) * (box1[:,3]-box1[:,1])  # [N,]
-        area2 = (box2[:,2]-box2[:,0]) * (box2[:,3]-box2[:,1])  # [M,]
-        area1 = area1.unsqueeze(1).expand_as(inter)  # [N,] -> [N,1] -> [N,M]
-        area2 = area2.unsqueeze(0).expand_as(inter)  # [M,] -> [1,M] -> [N,M]
-
-        iou = inter / (area1 + area2 - inter)
-        return iou
-
-    def forward(self, predict, target):
-        '''
-        pred_tensor: (tensor) size(batchsize,S,S,Bx5+20=30) [x,y,w,h,c]
-        target_tensor: (tensor) size(batchsize,S,S,30)
-        '''
-        N = predict.size()[0]
-        coo_mask = (target[:,:,:,4] > 0).unsqueeze(-1).expand_as(target)
-        noo_mask = (target[:,:,:,4] == 0).unsqueeze(-1).expand_as(target)
-
-        coo_pred = predict[coo_mask].view(-1,26)
-        box_pred = coo_pred[:,:10].contiguous().view(-1,5) #box[x1,y1,w1,h1,c1]
-        class_pred = coo_pred[:,10:]                       #[x2,y2,w2,h2,c2]
+    def forward(self, x):
+        """
+          input_size:    n * 3 * 448 * 448
+          VGG16_bn:      n * 512 * 7 * 7
+          Flatten Layer: n * 25088
+          Yolo Layer:    n * 5096
+          Sigmoid Layer: n * 5096
+          Reshape Layer: n * 14 * 14 * 26
+        """
+        # print(x.shape, x.dtype)
         
-        coo_target = target[coo_mask].view(-1,26)
-        box_target = coo_target[:,:10].contiguous().view(-1,5)
-        class_target = coo_target[:,10:]
-
-        # compute not contain obj loss
-        noo_pred = predict[noo_mask].view(-1,26)
-        noo_target = target[noo_mask].view(-1,26)
-        noo_pred_mask = torch.ByteTensor(noo_pred.size())
-        noo_pred_mask.zero_()
-        noo_pred_mask[:,4] = 1
-        noo_pred_mask[:,9] = 1
-        noo_pred_c = noo_pred[noo_pred_mask] #noo pred只需要计算 c 的损失 size[-1,2]
-        noo_target_c = noo_target[noo_pred_mask].type(torch.float)
-        nooobj_loss = F.mse_loss(noo_pred_c, noo_target_c, size_average=False)
-
-        # compute contain obj loss
-        coo_response_mask = torch.ByteTensor(box_target.size())
-        coo_response_mask.zero_()
-        coo_not_response_mask = torch.ByteTensor(box_target.size())
-        coo_not_response_mask.zero_()
-        box_target_iou = torch.zeros(box_target.size())
+        x = self.features(x)
+        # print(x.shape, x.dtype)
         
-        for i in range(0, box_target.size()[0], 2): #choose the best iou box
-            box1 = box_pred[i:i+2]
-            box1_xyxy = Variable(torch.FloatTensor(box1.size()))
-            box1_xyxy[:,:2] = box1[:,:2] / 7. - 0.5 * box1[:,2:4]
-            box1_xyxy[:,2:4] = box1[:,:2] / 7. + 0.5 * box1[:,2:4]
-            box2 = box_target[i].view(-1,5)
-            box2_xyxy = Variable(torch.FloatTensor(box2.size()))
-            box2_xyxy[:,:2] = box2[:,:2] / 7. - 0.5 * box2[:,2:4]
-            box2_xyxy[:,2:4] = box2[:,:2] / 7. + 0.5 * box2[:,2:4]
-            iou = self.compute_iou(box1_xyxy[:,:4],box2_xyxy[:,:4]) #[2,1]
-            max_iou,max_index = iou.max(0)
-            max_index = max_index.data
-            
-            coo_response_mask[i+max_index]=1
-            coo_not_response_mask[i+1-max_index]=1
-
-            box_target_iou[i+max_index,torch.LongTensor([4])] = (max_iou).data
-
-        box_target_iou = Variable(box_target_iou)
-
-        #1.response loss
-        box_pred_response = box_pred[coo_response_mask].view(-1,5)
-        box_target_response_iou = box_target_iou[coo_response_mask].type(torch.float).cuda().view(-1,5)
-        box_target_response = box_target[coo_response_mask].type(torch.float).cuda().view(-1,5)
-        contain_loss = F.mse_loss(box_pred_response[:,4],box_target_response_iou[:,4],size_average=False)
-        loc_loss = (F.mse_loss(box_pred_response[:,:2],box_target_response[:,:2],size_average=False) + 
-                    F.mse_loss(torch.sqrt(box_pred_response[:,2:4]),torch.sqrt(box_target_response[:,2:4]),size_average=False))
-
-        #2.not response loss
-        box_pred_not_response = box_pred[coo_not_response_mask].view(-1,5)
-        box_target_not_response = box_target[coo_not_response_mask].type(torch.float).cuda().view(-1,5)
-        box_target_not_response[:, 4] = 0
-        #not_contain_loss = F.mse_loss(box_pred_response[:,4],box_target_response[:,4],size_average=False)
+        x = x.view(x.size(0), -1)
+        # print(x.shape, x.dtype)
         
-        #I believe this bug is simply a typo
-        not_contain_loss = F.mse_loss(box_pred_not_response[:,4], box_target_not_response[:,4],size_average=False)
+        x = self.yolo(x)
+        # print(x.shape, x.dtype)
+        
+        x = torch.sigmoid(x) 
+        # print(x.shape, x.dtype)
+        
+        x = x.view(-1, 14, 14, 26)
+        # print(x.shape, x.dtype)
+        
+        return x
 
-        #3.class loss
-        class_loss = F.mse_loss(class_pred, class_target.type(torch.float).cuda(), size_average=False)
-
-        # print("Class_loss: {}".format(class_loss))
-        # print("No_object_loss: {}".format(nooobj_loss.item()))
-        # print("Response_loss: {}".format(contain_loss.item()))
-        # print("Location_loss: {}".format(loc_loss.item()))
-        # print("Not_response_loss: {}".format(not_contain_loss.item()))
-
-        # return (self.l_coord*loc_loss + 2*contain_loss + not_contain_loss + self.l_noobj*nooobj_loss + class_loss)/N
-        return (self.l_coord * loc_loss + contain_loss + not_contain_loss + self.l_noobj * nooobj_loss + class_loss) / N
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
 
 class YoloLoss(nn.Module):
     def __init__(self, grid_num, bbox_num, lambda_coord, lambda_noobj, device):
@@ -248,7 +177,7 @@ class YoloLoss(nn.Module):
 
         return iou
 
-    def xywh_xyxy(self, tensor: torch.tensor):
+    def xyhw_xyxy(self, tensor: torch.tensor):
         tensor_xy = torch.zeros_like(tensor)
         
         tensor_xy[:,  :2] = tensor[:,  :2] / self.grid_num - 0.5 * tensor[:, 2:4]
@@ -297,8 +226,8 @@ class YoloLoss(nn.Module):
         boxes_predict = coord_predict[:, :10]       # Match "delta_xy" in dataset.py
         boxes_target  = coord_target[:, :10]        # Match "delta_xy" in dataset.py
         
-        boxes_predict_xy = self.xywh_xyxy(boxes_predict)
-        boxes_target_xy = self.xywh_xyxy(boxes_target)
+        boxes_predict_xy = self.xyhw_xyxy(boxes_predict)
+        boxes_target_xy = self.xyhw_xyxy(boxes_target)
         iou = self.IoU(boxes_predict_xy, boxes_target_xy)
         # print("IoU: {}".format(iou))
         # print("IoU.shape: {}".format(iou.shape))
@@ -327,6 +256,7 @@ class YoloLoss(nn.Module):
         boxes_predict = boxes_predict.contiguous().view(-1, 5)
         boxes_target_iou = boxes_target.type(torch.float).contiguous().view(-1, 5)
         boxes_target_iou[response_mask, 4] = iou_max
+        # boxes_target_iou[response_mask, 4] = 1
         boxes_target_iou[not_response_mask, 4] = 0
         # print("boxes_target_iou.shape: {}".format(boxes_target_iou.shape))
         # print("boxes_target_iou: {}".format(boxes_target_iou))
@@ -358,89 +288,6 @@ class YoloLoss(nn.Module):
         loss = self.lambda_coord * location_loss + class_loss + response_loss + self.lambda_noobj * (not_response_loss + no_object_loss)
         loss /= batch_size
         return loss
-
-class VGG_improve(nn.Module):
-    """
-      input_size  = 448 * 448
-      output_size = 14 * 14 * (5 * 2 + 16) = 1274
-    """
-    def __init__(self, features, output_size=1274, image_size=448):
-        super(VGG_improve, self).__init__()
-        self.features = features
-        self.image_size = image_size
-
-        self.yolo = nn.Sequential(
-            nn.Linear(512 * 14 * 14, 8092),
-            nn.BatchNorm1d(num_features=8092),
-            nn.LeakyReLU(negative_slope=0.02),
-            nn.Dropout(0.5),
-
-            nn.Linear(8092, 14 * 14 * 26)
-        )
-        self._initialize_weights()
-
-    def forward(self, x):
-        """
-          input_size:    n * 3 * 448 * 448
-          VGG16_bn:      n * 512 * 14 * 14
-          Flatten Layer: n * 
-          Yolo Layer:    n * 
-          Sigmoid Layer: n * 
-          Reshape Layer: n * 14 * 14 * 26
-        """
-        # print(x.shape, x.dtype)
-        
-        x = self.features(x)
-        # print(x.shape, x.dtype)
-        
-        x = x.view(x.size(0), -1)
-        # print(x.shape, x.dtype)
-        
-        x = self.yolo(x)
-        # print(x.shape, x.dtype)
-        
-        x = torch.sigmoid(x) 
-        # print(x.shape, x.dtype)
-        
-        x = x.view(-1, 14, 14, 26)
-        # print(x.shape, x.dtype)
-        
-        return x
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                m.weight.data.normal_(0, 0.01)
-                m.bias.data.zero_()
-
-def make_layers_improve(cfg, batch_norm=False):
-    """
-    Args:
-        cfg: the sequence configuration with ints and chars.
-        batch_norm: provide batch normalization layer
-
-    Return:
-        nn.Sequential(*layers): the model sequence
-    """
-    layers = []
-    in_channels = 3
-    s = 1
-
-    for v in cfg:
-        if v == 'M':
-            layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-        
-        else:
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, stride=s, padding=1)
-            
-            if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
-            else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
-            
-            in_channels = v
-
-    return nn.Sequential(*layers)
 
 # Using the configuration to make the layers
 def make_layers(cfg, batch_norm=False):
@@ -495,31 +342,6 @@ cfg = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
 }
 
-def Yolov1_vgg16bn_improve(pretrained=False, **kwargs):
-    """
-    VGG 16-layer model (configuration "D") with batch normalization
-    
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-            
-    Return:
-        yolo: the prediction model YOLO.
-    """
-
-    # print(make_layers(cfg['D'], batch_norm=True))
-
-    yolo = VGG_improve(make_layers_improve(cfg['D'], batch_norm=True), **kwargs)
-
-    vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
-    yolo_state_dict = yolo.state_dict()
-    for k in vgg_state_dict.keys():
-        if k in yolo_state_dict.keys() and k.startswith('features'):
-            yolo_state_dict[k] = vgg_state_dict[k]
-    
-    yolo.load_state_dict(yolo_state_dict)
-    
-    return yolo
-
 def Yolov1_vgg16bn(pretrained=False, **kwargs):
     """
     VGG 16-layer model (configuration "D") with batch normalization
@@ -545,9 +367,34 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
     
     return yolo
 
+def Yolov1_vgg16bn_Improve(pretrained=False, **kwargs):
+    """
+    VGG 16-layer model (configuration "D") with batch normalization
+    
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+            
+    Return:
+        yolo: the prediction model YOLO.
+    """
+
+    # print(make_layers(cfg['D'], batch_norm=True))
+
+    yolo = VGG_Improve(make_layers(cfg['D'], batch_norm=True), **kwargs)
+
+    vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
+    yolo_state_dict = yolo.state_dict()
+    for k in vgg_state_dict.keys():
+        if k in yolo_state_dict.keys() and k.startswith('features'):
+            yolo_state_dict[k] = vgg_state_dict[k]
+    
+    yolo.load_state_dict(yolo_state_dict)
+    
+    return yolo
+
 def model_structure_unittest():
     device = utils.selectDevice(show=True)
-    model = Yolov1_vgg16bn_improve(pretrained=True).to(device)
+    model = Yolov1_vgg16bn_Improve(pretrained=True).to(device)
 
     print(model)
     
@@ -591,7 +438,6 @@ def loss_function_unittest():
     
 if __name__ == '__main__':
     model_structure_unittest()
-    
     # loss_function_unittest()
 
     # model = Yolov1_vgg16bn(pretrained=True).to(device)

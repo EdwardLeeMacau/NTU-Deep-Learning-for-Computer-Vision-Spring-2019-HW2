@@ -15,6 +15,13 @@ classnames = [
 labelEncoder  = LabelEncoder().fit(classnames)
 oneHotEncoder = OneHotEncoder(sparse=False).fit(labelEncoder.transform(classnames).reshape(16, 1))
 
+def set_optimizer_lr(optimizer, lr):
+    # callback to set the learning rate in an optimizer, without rebuilding the whole optimizer
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    
+    return optimizer
+
 def selectDevice(show=False):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")

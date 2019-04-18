@@ -281,7 +281,7 @@ def scan_map(detpath="hw2_train_val/val1500/labelTxt_hbb_pred/", annopath="hw2_t
         classaps.append(ap)
 
     map = map/len(classnames)
-    print('map:', map)
+    print('mAP: ', map)
 
     return classaps, map
 
