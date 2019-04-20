@@ -18,7 +18,6 @@ from PIL import Image
 
 import numpy as np
 
-import improve_models
 import models
 import dataset
 import utils

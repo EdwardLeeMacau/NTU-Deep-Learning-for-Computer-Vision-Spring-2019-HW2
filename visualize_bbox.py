@@ -64,11 +64,11 @@ def parse_det(detfile):
 
 def scan_folder(img_folder, det_folder, out_folder, size):
     """ scan the folder and make all photo with grids. """
-    length = len(str(size))
-
-    for i in range(1, size + 1):
+    
+    for i, name in enumerate(os.listdir(img_folder), 1):
+    # for i in range(1, size + 1):
         if (i % 100) == 0:  print(i)
-        index = str(i).zfill(length)
+        index = name.split(".")[0]
 
         imgfile = os.path.join(img_folder, index+".jpg")
         detfile = os.path.join(det_folder, index+".txt")

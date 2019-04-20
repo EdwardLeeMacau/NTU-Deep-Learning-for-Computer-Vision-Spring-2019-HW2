@@ -59,7 +59,8 @@ class MyDataset(Dataset):
             # image_2, boxes_2 = self.HorizontalFlip(image, boxes)
             # image_3, boxes_3 = self.VerticalFlip(image, boxes)
         
-            image = self.RandomAdjustHSV(image, 0.9, 1.1)
+            # image = self.RandomAdjustHSV(image, 0.9, 1.1)
+            if random.random() < 0.5: image, boxes = self.ZoomIn(image, boxes, 1.1)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
             if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
             
@@ -213,6 +214,19 @@ class MyDataset(Dataset):
         ymax = h - boxes[:, 1]
         boxes[:, 1] = ymin
         boxes[:, 3] = ymax
+
+        return im, boxes
+
+    def ZoomIn(self, im, boxes, scale):
+        assert scale > 1
+
+        h, w = im.size
+        boundary = int(w * (scale - 1) / 2)
+
+        im = im.resize((int(h * scale), int(w * scale)), Image.ANTIALIAS)
+        im = im.crop((boundary, boundary, boundary + h, boundary + w))
+
+        boxes = (boxes * scale - boundary).astype(int).clip(min=0, max=w)
 
         return im, boxes
 

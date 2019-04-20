@@ -95,7 +95,7 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         logger.info("*** Train set - Average loss: {:.4f}".format(train_loss))
         logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
         
-        if epoch >= 20:
+        if epoch >= 25:
             mean_ap = test_map(model, criterion, val_loader, device, grid_num=7)
             val_mean_aps.append(mean_ap)
             
@@ -204,18 +204,18 @@ def main():
     elif args.command == "improve":
         model_improve = models.Yolov1_vgg16bn_Improve(pretrained=True).to(device)
         criterion = models.YoloLoss(14., 2., 5, 0.5, device).to(device)
-        optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40], gamma=0.1)
+        optimizer = optim.SGD(model_improve.parameters(), lr=args.lr, weight_decay=1e-4)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [15, 30, 40], gamma=0.1)
         start_epoch = 0
         
         if args.load:
             model_improve, optimizer, start_epoch, scheduler = utils.loadCheckpoint(args.load, model, optimizer, scheduler)
 
-        model_improve = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7)
+        model_improve = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7, save_name="Yolov1-Improve")
 
     end = time.time()
     logger.info("*** Training ended.")
-    logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
+    logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, ((end - start) // 60) % 60, (end - start) % 60))
 
 if __name__ == "__main__":
     os.system("clear")
@@ -230,13 +230,13 @@ if __name__ == "__main__":
     basic_parser = subparsers.add_parser("basic")
     basic_parser.add_argument("--lr", default=1e-3, type=float, help="Set the initial learning rate")
     basic_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
-    basic_parser.add_argument("--epochs", default=40, type=int, help="Set the epochs")
+    basic_parser.add_argument("--epochs", default=60, type=int, help="Set the epochs")
     basic_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     improve_parser = subparsers.add_parser("improve")
     improve_parser.add_argument("--lr", default=1e-3, type=float, help="Set the initial learning rate")
     improve_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
-    improve_parser.add_argument("--epochs", default=70, type=int, help="Set the epochs")
+    improve_parser.add_argument("--epochs", default=60, type=int, help="Set the epochs")
     improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     args = parser.parse_args()
