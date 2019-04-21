@@ -93,7 +93,7 @@ def visualize(imgfile, detfile, outputfile):
 def main():
     """ Scan the whole folder. """
     imgfile = os.path.join(args.root, "images")
-    detfile = os.path.join(args.root, "labelTxt_hbb_pred")
+    detfile = os.path.join(args.root, "labelTxt_hbb_pred_sh")
     outfile = os.path.join(args.root, "images_pred")
     
     if not os.path.exists(outfile):

@@ -310,7 +310,7 @@ def main():
         # print("ClassIndexs: {}".format(classIndexs))
         # print("ClassNames: {}".format(classNames))
 
-        export(boxes, classNames, probs, imgName + "txt", args.output)
+        export(boxes, classNames, probs, imgName[0] + ".txt", args.output)
         
         if batch_idx % 100 == 0:
             print("Predicted: [{}/{} ({:.0f}%)]".format(batch_idx, len(test_loader.dataset), 100. * batch_idx / len(test_loader.dataset)))

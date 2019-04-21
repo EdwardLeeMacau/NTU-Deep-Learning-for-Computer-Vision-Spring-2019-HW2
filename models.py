@@ -75,8 +75,13 @@ class VGG_Improve(nn.Module):
         self.yolo = nn.Sequential(
             nn.Linear(25088, 8192),
             # nn.BatchNorm1d(num_features=4096),
-            nn.LeakyReLU(negative_slope=0.02),
+            nn.ReLU(negative_slope=0.02),
             nn.Dropout(0.5),
+
+            # nn.Linear(8192, 8192),
+            # nn.BatchNorm1d(num_features=8192),
+            # nn.ReLU(negative_slope=0.02),
+            # nn.Dropout(0.5),
 
             nn.Linear(8192, 5096)
         )

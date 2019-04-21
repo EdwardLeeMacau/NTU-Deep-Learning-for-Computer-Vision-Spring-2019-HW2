@@ -51,10 +51,20 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
     # T_mult = 1
 
     for epoch in range(start_epochs + 1, epochs + 1):
+        # if epoch <= 10:
+        #     lr = epoch * 1e-4
+        #     optimizer = utils.set_optimizer_lr(optimizer, lr)
+        # if epoch == 30:
+        #     lr = 1e-4
+        #     optimizer = utils.set_optimizer_lr(optimizer, lr)
+        # if epoch == 40:
+        #     lr = 1e-5
+        #     optimizer = utils.set_optimizer_lr(optimizer, lr)
+        
         model.train()
         
-        if scheduler: 
-            scheduler.step()
+        # if scheduler: 
+        #     scheduler.step()
 
         iteration = 0
         train_loss = 0
@@ -95,7 +105,7 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         logger.info("*** Train set - Average loss: {:.4f}".format(train_loss))
         logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
         
-        if epoch >= 25:
+        if epoch > 0:
             mean_ap = test_map(model, criterion, val_loader, device, grid_num=7)
             val_mean_aps.append(mean_ap)
             
@@ -193,7 +203,7 @@ def main():
         model = models.Yolov1_vgg16bn(pretrained=True).to(device)
         criterion = models.YoloLoss(7., 2., 5., 0.5, device).to(device)
         optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=1e-4)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 45, 55], gamma=0.1)
         start_epoch = 0
 
         if args.load:
@@ -205,7 +215,7 @@ def main():
         model_improve = models.Yolov1_vgg16bn_Improve(pretrained=True).to(device)
         criterion = models.YoloLoss(14., 2., 5, 0.5, device).to(device)
         optimizer = optim.SGD(model_improve.parameters(), lr=args.lr, weight_decay=1e-4)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [15, 30, 40], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 60], gamma=0.1)
         start_epoch = 0
         
         if args.load:

@@ -6,11 +6,12 @@ import models
 
 from torch.utils.data import Dataset, DataLoader
 import torch
+import torchvision.transforms as transforms
 
 import utils
 
 labelEncoder = utils.labelEncoder
-trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=False, transform=None)
+trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=False, transform=transforms.ToTensor())
 trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=0)
 
 def draw_bbox():
@@ -24,14 +25,15 @@ def draw_bbox():
         visualize_bbox.visualize(imgpath, detpath, outpath)
 
 def count_class(dataloader: DataLoader):
-    labels = labelEncoder.inverse_transform(torch.linspace(0, 15, step=16).unsqueeeze(-1))
+    labels = labelEncoder.inverse_transform(torch.linspace(0, 15, steps=16).type(torch.long).unsqueeze(-1))
     counts = torch.zeros(16, dtype=torch.long)
 
-    for _, target, _ in trainLoader:
+    for index, (_, target, _) in enumerate(trainLoader, 1):
+        print(index * 64)
         class_onehot = target[:, :, :, 10:].type(torch.long)
         count = class_onehot.sum(0).sum(0).sum(0)
         
-        print(count.shape)
+        print(count.data.tolist())
         counts += count
 
     print(counts)
