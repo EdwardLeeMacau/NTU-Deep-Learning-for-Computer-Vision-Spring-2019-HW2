@@ -63,8 +63,8 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         
         model.train()
         
-        # if scheduler: 
-        #     scheduler.step()
+        if scheduler: 
+            scheduler.step()
 
         iteration = 0
         train_loss = 0
@@ -106,7 +106,7 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
         
         if epoch > 0:
-            mean_ap = test_map(model, criterion, val_loader, device, grid_num=7)
+            mean_ap = test_map(model, criterion, val_loader, device, grid_num=14)
             val_mean_aps.append(mean_ap)
             
             if mean_ap >= max(val_mean_aps):
@@ -215,7 +215,7 @@ def main():
         model_improve = models.Yolov1_vgg16bn_Improve(pretrained=True).to(device)
         criterion = models.YoloLoss(14., 2., 5, 0.5, device).to(device)
         optimizer = optim.SGD(model_improve.parameters(), lr=args.lr, weight_decay=1e-4)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 60], gamma=0.1)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [20, 40, 70], gamma=0.1)
         start_epoch = 0
         
         if args.load:
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     improve_parser = subparsers.add_parser("improve")
     improve_parser.add_argument("--lr", default=1e-3, type=float, help="Set the initial learning rate")
     improve_parser.add_argument("--batchs", default=16, type=int, help="Set the epochs")
-    improve_parser.add_argument("--epochs", default=60, type=int, help="Set the epochs")
+    improve_parser.add_argument("--epochs", default=80, type=int, help="Set the epochs")
     improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     args = parser.parse_args()

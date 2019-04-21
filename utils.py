@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from torch import optim
 
+import sys
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 classnames = [
@@ -63,6 +64,16 @@ def loadModel(checkpoint_path: str, model: nn.Module):
 
     return model
 
+def checkpointToModel(checkpoint_path: str, model_path: str):
+    state = torch.load(checkpoint_path)
+
+    newState = {
+        'state_dict': state['state_dict']
+    }
+
+    torch.save(newState, model_path)
+    
+
 def IoU(box: torch.Tensor, remains: torch.Tensor):
     """
     Calcuate the IoU of the specific bbox and other boxes.
@@ -102,3 +113,6 @@ def IoU(box: torch.Tensor, remains: torch.Tensor):
     iou = intersectionArea / (area_1 + area_2 - intersectionArea)
 
     return iou
+
+if __name__ == "__main__":
+    checkpointToModel(sys.argv[1], sys.argv[2])

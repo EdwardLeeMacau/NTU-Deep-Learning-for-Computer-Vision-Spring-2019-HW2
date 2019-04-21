@@ -304,8 +304,11 @@ def main():
     for batch_idx, (data, imgName) in enumerate(test_loader, 1):
         data = data.to(device)
         output = model(data)
-        boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou)
-        
+        if args.command == "basic":
+            boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou)
+        if args.command == "improve":
+            boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou, grid_num=14)
+
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
         # print("ClassIndexs: {}".format(classIndexs))
         # print("ClassNames: {}".format(classNames))

@@ -59,7 +59,7 @@ class MyDataset(Dataset):
             # image_2, boxes_2 = self.HorizontalFlip(image, boxes)
             # image_3, boxes_3 = self.VerticalFlip(image, boxes)
         
-            # image = self.RandomAdjustHSV(image, 0.9, 1.1)
+            image = self.RandomAdjustHSV(image, 0.95, 1.05)
             # if random.random() < 0.5: image, boxes = self.ZoomIn(image, boxes, 1.1)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
             if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)

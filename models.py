@@ -73,18 +73,23 @@ class VGG_Improve(nn.Module):
         self.image_size = image_size
 
         self.yolo = nn.Sequential(
-            nn.Linear(25088, 8192),
+            nn.Conv2d(512, 26, kernel_size=1),
+            # nn.Linear(25088, 8192),
             # nn.BatchNorm1d(num_features=4096),
-            nn.ReLU(negative_slope=0.02),
-            nn.Dropout(0.5),
+            # nn.LeakyReLU(negative_slope=0.02),
+            # nn.ReLU(inplace=True),
+            # nn.Dropout(0.5),
 
             # nn.Linear(8192, 8192),
             # nn.BatchNorm1d(num_features=8192),
             # nn.ReLU(negative_slope=0.02),
             # nn.Dropout(0.5),
 
-            nn.Linear(8192, 5096)
+            # nn.Linear(8192, 5096)
         )
+
+        self.bn = nn.BatchNorm2d(num_features=26)
+
         self._initialize_weights()
 
     def forward(self, x):
@@ -101,16 +106,18 @@ class VGG_Improve(nn.Module):
         x = self.features(x)
         # print(x.shape, x.dtype)
         
-        x = x.view(x.size(0), -1)
+        # x = x.view(x.size(0), -1)
         # print(x.shape, x.dtype)
         
         x = self.yolo(x)
+        x = self.bn(x)
         # print(x.shape, x.dtype)
         
         x = torch.sigmoid(x) 
         # print(x.shape, x.dtype)
         
-        x = x.view(-1, 14, 14, 26)
+        x = x.permute(0, 2, 3, 1)
+        # x = x.view(-1, 14, 14, 26)
         # print(x.shape, x.dtype)
         
         return x
@@ -345,6 +352,7 @@ def conv_bn_relu(in_channels,out_channels,kernel_size=3,stride=2,padding=1):
 #    "M" = MaxPooling Layer
 cfg = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
+    'D2': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512]
 }
 
 def Yolov1_vgg16bn(pretrained=False, **kwargs):
@@ -385,7 +393,7 @@ def Yolov1_vgg16bn_Improve(pretrained=False, **kwargs):
 
     # print(make_layers(cfg['D'], batch_norm=True))
 
-    yolo = VGG_Improve(make_layers(cfg['D'], batch_norm=True), **kwargs)
+    yolo = VGG_Improve(make_layers(cfg['D2'], batch_norm=True), **kwargs)
 
     vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
     yolo_state_dict = yolo.state_dict()

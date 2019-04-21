@@ -11,7 +11,7 @@ import torchvision.transforms as transforms
 import utils
 
 labelEncoder = utils.labelEncoder
-trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=False, transform=transforms.ToTensor())
+trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, grid_num=14, train=False, transform=transforms.ToTensor())
 trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=0)
 
 def draw_bbox():
@@ -28,6 +28,9 @@ def count_class(dataloader: DataLoader):
     labels = labelEncoder.inverse_transform(torch.linspace(0, 15, steps=16).type(torch.long).unsqueeze(-1))
     counts = torch.zeros(16, dtype=torch.long)
 
+    # print(labels)
+    # raise Error
+
     for index, (_, target, _) in enumerate(trainLoader, 1):
         print(index * 64)
         class_onehot = target[:, :, :, 10:].type(torch.long)
@@ -41,7 +44,7 @@ def count_class(dataloader: DataLoader):
     return labels, counts.data.tolist()
 
 if __name__ == "__main__":
-    draw_bbox()
+    # draw_bbox()
 
     labels, counts = count_class(trainLoader)
     print(labels)
