@@ -167,8 +167,6 @@ def test_map(model, criterion, dataloader: DataLoader, device, grid_num):
 def main():
     start = time.time()
 
-    # torch.set_default_tensor_type(torch.cuda.FloatTensor)
-
     if args.command == "basic":
         trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=args.augment, transform=transforms.Compose([
             transforms.Resize((448, 448)),
