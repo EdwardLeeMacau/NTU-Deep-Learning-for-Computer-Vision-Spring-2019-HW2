@@ -1,26 +1,25 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as transforms
-from torch.autograd import Variable
-from torch.utils.data import Dataset, DataLoader
-
-import os
-import time
-import random
-import pdb
 import argparse
 import logging
 import logging.config
-from PIL import Image
+import os
+import pdb
+import random
+import time
 
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset
 
-import models
 import dataset
+import models
 import utils
+
 
 logging.config.fileConfig("logging.ini")
 logger = logging.getLogger(__name__)
@@ -158,7 +157,25 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
     return torch.tensor(keep_boxes, dtype=torch.long)
 
 def export(boxes, classNames, probs, labelName, outputpath, image_size=512.):
-    """ Write one output file with the boxes and the classnames. """
+    """ 
+    Write textfile with the boxes and the classnames. 
+
+    Parameters
+    ----------
+    boxes : 
+
+    classNames : 
+
+    probs : 
+
+    labelName : 
+
+    outputpath : str
+        The directory of the generated textfile
+
+    imageSize : float
+        The original size of the image.
+    """
     boxes = (boxes * image_size).round()
     rect  = torch.zeros(boxes.shape[0], 8)
 
@@ -182,69 +199,6 @@ def export(boxes, classNames, probs, labelName, outputpath, image_size=512.):
             textfile.write(" ".join(map(str, rect[i].data.tolist())) + " ")
             textfile.write(" ".join((className, prob)) + "\n")
 
-def decode_unittest():
-    output = torch.zeros(1, 7, 7, 26)
-    target = torch.zeros_like(output)
-
-    obj   = torch.tensor([0.5, 0.5, 0.2, 0.8, 1])
-    classIndex = torch.tensor([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-    target[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
-    output[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
-
-    boxes, classIndexs, probs = decode(output, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2)
-    classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-
-def encoder_unittest():
-    print("*** classnames: \n{}".format(classnames))
-    
-    indexs = labelEncoder.transform(classnames).reshape(-1, 1)
-    print("*** indexs: \n{}".format(indexs))
-    
-    onehot = oneHotEncoder.transform(indexs)
-    print("*** onehot: \n{}".format(onehot))
-    
-    reverse_index = oneHotEncoder.inverse_transform(onehot).reshape(-1)
-    print("*** reverse index: \n{}".format(reverse_index))
-    
-    reverse_classnames = labelEncoder.inverse_transform(reverse_index.astype(int))
-    print("*** reverse classnames: \n{}".format(reverse_classnames))
-    
-def system_unittest():
-    dataset  = dataset.MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor()
-    ]))
-
-    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
-    
-    # Testset prediction
-    for _, target, labelName in loader:
-        boxes, classIndexs, probs = decode(target, prob_min=0, iou_threshold=0.5)
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-        
-        print("Raw Data: ")
-        with open(labelName[0], "r") as textfile:
-            content = textfile.readlines()
-            print("\n".join(content))
-
-        print("My Decoder: ")
-        boxes = (boxes * 512).round()
-        rect  = torch.zeros(boxes.shape[0], 8)
-        rect[:,  :3] = boxes[:, :3]
-        rect[:, 3:6] = boxes[:, 1:]
-        rect[:, 6]   = boxes[:, 0]
-        rect[:, 7]   = boxes[:, 3]
-        round_func = lambda x: round(x, 3)
-        probs = list(map(str, list(map(round_func, probs.data.tolist()))))
-        classNames = list(map(str, classNames))
-        for i in range(0, rect.shape[0]):
-            prob = probs[i]
-            className = classNames[i]
-            print(" ".join(map(str, rect[i].data.tolist())), end=" ")
-            print(" ".join((className, prob)))
-
-        pdb.set_trace()
-
 def main():
     """
     Workflow:
@@ -256,8 +210,6 @@ def main():
     3.  Output File if needed.
     4.  MAP calculation. 
     """
-    
-    # start = time.time()
 
     torch.set_default_dtype(torch.float)
     device = utils.selectDevice()
@@ -276,58 +228,37 @@ def main():
     #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     # ]))
 
-    # validationset = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
-    #     transforms.Resize((448, 448)),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # ]))
-
+    # TODO: Reset as MyDataset
     testset  = dataset.Testset(img_root=args.images, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ]))
 
-    # train_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=args.worker)
-    # val_loader = DataLoader(validationset, batch_size=1, shuffle=False, num_workers=args.worker)
     test_loader = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
 
     # Return the imageName for storing the predict_msg
-    if not os.path.exists(args.output): os.mkdir(args.output)
+    if not os.path.exists(args.output): 
+        os.mkdir(args.output)
 
-    # if args.command == "train":
-    #     loader = train_loader
-    # elif args.command == "val":
-    #     loader = testset_loader
-
-    # for batch_idx, (data, labelName) in enumerate(loader, 1):
     for batch_idx, (data, imgName) in enumerate(test_loader, 1):
         data = data.to(device)
         output = model(data)
+
         if args.command == "basic":
             boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou)
         if args.command == "improve":
             boxes, classIndexs, probs = decode(output, nms=args.nms, prob_min=args.prob, iou_threshold=args.iou, grid_num=14)
 
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-        # print("ClassIndexs: {}".format(classIndexs))
-        # print("ClassNames: {}".format(classNames))
-
+        
         export(boxes, classNames, probs, imgName[0] + ".txt", args.output)
         
         if batch_idx % 100 == 0:
             print("Predicted: [{}/{} ({:.0f}%)]".format(batch_idx, len(test_loader.dataset), 100. * batch_idx / len(test_loader.dataset)))
             
-    # end = time.time()
-    # logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
-
 if __name__ == "__main__":
-    # decode_unittest()
-    # encoder_unittest()
-    # system_unittest()
-    # raise NotImplementedError
-
-    # os.system("clear")
+    os.system("clear")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="Set the trained model")
@@ -339,15 +270,11 @@ if __name__ == "__main__":
     parser.add_argument("--prob", default=0.1, type=float, help="NMS prob_min, pick up the bbox with the class_prob > prob_min")
     
     subparsers = parser.add_subparsers(required=True, dest="command")
-    # train_parser = subparsers.add_parser("train")
-    # train_parser.add_argument("--output", default="hw2_train_val/train15000/labelTxt_hbb_pred")
-    # val_parser = subparsers.add_parser("val")
-    # val_parser.add_argument("--output", default="hw2_train_val/val1500/labelTxt_hbb_pred")
+    
     basic_parser = subparsers.add_parser("basic")
+    
     improve_parser = subparsers.add_parser("improve")
 
     args = parser.parse_args()
-
-    print(args)
 
     main()

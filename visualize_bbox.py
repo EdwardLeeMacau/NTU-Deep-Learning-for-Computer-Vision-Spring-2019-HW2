@@ -1,15 +1,16 @@
-#encoding:utf-8
-#
-#created by xiongzihua
-#
+"""
+  Filename     [ visualize_bbox.py ]
+  PackageName  [ DLCV Spring 2019 - YOLOv1 ]
+  Synposis     [  ]
+"""
 
 import sys
 import os
 import argparse
 
 import cv2
-from PIL import Image
 import numpy as np
+from PIL import Image
 
 DATA_CLASSES = (  # always index 0
     'plane', 'ship', 'storage-tank', 'baseball-diamond',
@@ -18,27 +19,14 @@ DATA_CLASSES = (  # always index 0
     'helicopter', 'roundabout', 'soccer-ball-field',
     'swimming-pool', 'container-crane')
   
-Color = [[0, 0, 0],
-                    [128, 0, 0],
-                    [0, 128, 0],
-                    [128, 128, 0],
-                    [0, 0, 128],
-                    [128, 0, 128],
-                    [0, 128, 128],
-                    [128, 128, 128],
-                    [64, 0, 0],
-                    [192, 0, 0],
-                    [64, 128, 0],
-                    [192, 128, 0],
-                    [64, 0, 128],
-                    [192, 0, 128],
-                    [64, 128, 128],
-                    [192, 128, 128],
-                    [0, 64, 0],
-                    [128, 64, 0],
-                    [0, 192, 0],
-                    [128, 192, 0],
-                    [0, 64, 128]]
+Color = [
+    [0, 0, 0],    [128, 0, 0],   [0, 128, 0],    [128, 128, 0],
+    [0, 0, 128],  [128, 0, 128], [0, 128, 128],  [128, 128, 128],
+    [64, 0, 0],   [192, 0, 0],   [64, 128, 0],   [192, 128, 0],
+    [64, 0, 128], [192, 0, 128], [64, 128, 128], [192, 128, 128],
+    [0, 64, 0],   [128, 64, 0],  [0, 192, 0],    [128, 192, 0],
+    [0, 64, 128]
+]
         
 def parse_det(detfile):
     result = []
@@ -63,11 +51,21 @@ def parse_det(detfile):
     return result 
 
 def scan_folder(img_folder, det_folder, out_folder, size):
-    """ scan the folder and make all photo with grids. """
+    """ 
+    Scan the folder and make all photo with grids. 
+    
+    Parameters
+    ----------
+    img_folder, det_folder, out_folder : str
+        (...)
+
+    size : int
+        The size of dataset
+    """
     
     for i, name in enumerate(os.listdir(img_folder), 1):
-    # for i in range(1, size + 1):
-        if (i % 100) == 0:  print(i)
+        if (i % 100) == 0:  
+            print(i)
         index = name.split(".")[0]
 
         imgfile = os.path.join(img_folder, index+".jpg")
@@ -75,20 +73,41 @@ def scan_folder(img_folder, det_folder, out_folder, size):
 
         visualize(imgfile, detfile, os.path.join(out_folder, index+".jpg"))
 
+    return
+
 def visualize(imgfile, detfile, outputfile):
+    """
+    Draw the bbox on 1 image
+
+    Parameters
+    ----------
+    imgfile : numpy.array
+
+    detfile : str
+        The filename of detfile
+    
+    outputfile : str
+        The filename of outputfile
+    """
     image = cv2.imread(imgfile)
     result = parse_det(detfile)
 
     for left_up, right_bottom, class_name, prob in result:
         color = Color[DATA_CLASSES.index(class_name)]
+
+        # Write the rectangle
         cv2.rectangle(image,left_up,right_bottom,color,2)
-        label = class_name + str(round(prob,2))
+        
+        # Write the labelName
+        label = class_name + str(round(prob, 2))
         text_size, baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
-        p1 = (left_up[0], left_up[1]- text_size[1])
+        p1 = (left_up[0], left_up[1] - text_size[1])
         cv2.rectangle(image, (p1[0] - 2//2, p1[1] - 2 - baseline), (p1[0] + text_size[0], p1[1] + text_size[1]), color, -1)
         cv2.putText(image, label, (p1[0], p1[1] + baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, 8)
 
     cv2.imwrite(outputfile, image)
+
+    return
 
 def main():
     """ Scan the whole folder. """
@@ -114,7 +133,9 @@ if __name__ == '__main__':
 
     if args.command == "drawdet":
         main()
+
     elif args.command == "compare":
+        """ Code from Ugo Tan """
         outputfolder = os.path.join(args.root, "images_pred")
 
         detfolder = os.path.join(args.root, "labelTxt_hbb_pred")
@@ -158,8 +179,3 @@ if __name__ == '__main__':
             final = cv2.hconcat((final_pad, gt_image))
 
             cv2.imwrite(os.path.join(outputfolder, img_det_name+'_merge.jpg'), image)
-            
-            # Show the images
-            # cv2.imshow('Inference_GT.jpg', final)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()

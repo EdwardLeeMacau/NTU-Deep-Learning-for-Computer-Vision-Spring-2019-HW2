@@ -1,40 +1,39 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as transforms
-from torch.autograd import Variable
-from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+"""
+  Filename     [ train.py ]
+  PackageName  [ DLCV Spring 2019 - YOLOv1 ]
+  Synposis     [ Training Procedure of YOLOv1 ]
+"""
 
-# import glob
-import os
-import time
 import argparse
 import math
-import logging
-import logging.config
-# from PIL import Image
+import os
+import time
 
-import numpy as np
 import matplotlib.pyplot as plt
-# import skimage
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from torch.utils.data import DataLoader, Dataset
 
-import models
-import utils
 import dataset
-import predict
 import evaluation
-
-logging.config.fileConfig("logging.ini")
-logger = logging.getLogger(__name__)
+import models
+import predict
+import utils
 
 classnames    = utils.classnames
 labelEncoder  = utils.labelEncoder
 oneHotEncoder = utils.oneHotEncoder
 
-def train(model, criterion, optimizer, scheduler, train_loader, val_loader, start_epochs, epochs, device, grid_num=7, lr=0.001, log_interval=10, save_name="Yolov1"):
+# TODO: Train Backbone / Train the Dense Layer only.
+def train(model, criterion, optimizer, scheduler, train_loader, val_loader, 
+          start_epochs, epochs, device, grid_num=7, lr=0.001, log_interval=10, 
+          save_name="Yolov1"):
     model.train()
     
     epochs_list     = []
@@ -42,25 +41,7 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
     val_loss_list   = []
     val_mean_aps    = []
 
-    # lr_trace = [1e-3]
-    
-    # lr_min = 1e-4
-    # lr_max = 1e-3
-    # T_cur  = 0
-    # T_max  = 500
-    # T_mult = 1
-
     for epoch in range(start_epochs + 1, epochs + 1):
-        # if epoch <= 10:
-        #     lr = epoch * 1e-4
-        #     optimizer = utils.set_optimizer_lr(optimizer, lr)
-        # if epoch == 30:
-        #     lr = 1e-4
-        #     optimizer = utils.set_optimizer_lr(optimizer, lr)
-        # if epoch == 40:
-        #     lr = 1e-5
-        #     optimizer = utils.set_optimizer_lr(optimizer, lr)
-        
         model.train()
         
         if scheduler: 
@@ -72,22 +53,12 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         # Train and backpropagation
         for batch_idx, (data, target, _) in enumerate(train_loader, 1):
             data, target = data.to(device), target.to(device)
-
-            # lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(T_cur / T_max * math.pi))
-            # lr_trace.append(lr)
-            # optimizer = utils.set_optimizer_lr(optimizer, lr)            
             
             optimizer.zero_grad()
             output = model(data)
             loss = criterion(output, target)
             loss.backward()
             optimizer.step()
-
-            # T_cur += 1
-            # if T_cur > T_max:
-            #     logger.info("Learning rate reset.")
-            #     T_cur -= T_max
-            #     T_max *= T_mult
 
             train_loss += loss.item()
 
@@ -127,9 +98,6 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader, star
         plt.title("mAP vs Epochs")
         plt.savefig("mAP.png")
 
-        # if (epoch % 5 == 0):
-        #     utils.saveCheckpoint(save_name + "-{}.pth".format(epoch), model, optimizer, scheduler, epoch)
-
     return model 
     
 def test_loss(model, criterion, dataloader: DataLoader, device):
@@ -147,6 +115,17 @@ def test_loss(model, criterion, dataloader: DataLoader, device):
     return loss
 
 def test_map(model, criterion, dataloader: DataLoader, device, grid_num):
+    """ 
+    Evaluate the performance of model by mAP (mean Average Percision) 
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+
+    loader : torch.utils.data.DataLoader
+
+    grid_num : 
+    """
     model.eval()
     mean_ap = 0
 
@@ -165,29 +144,27 @@ def test_map(model, criterion, dataloader: DataLoader, device, grid_num):
     return mean_ap
 
 def main():
-    start = time.time()
-
     if args.command == "basic":
-        trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, train=args.augment, transform=transforms.Compose([
+        trainset = dataset.MyDataset(root="hw2_train_val/train15000", train=args.augment, transform=transforms.Compose([
             transforms.Resize((448, 448)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]))
 
-        testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, train=False, transform=transforms.Compose([
+        testset  = dataset.MyDataset(root="hw2_train_val/val1500", train=False, transform=transforms.Compose([
             transforms.Resize((448, 448)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]))
 
     elif args.command == "improve":
-        trainset = dataset.MyDataset(root="hw2_train_val/train15000", size=15000, grid_num=14, train=args.augment, transform=transforms.Compose([
+        trainset = dataset.MyDataset(root="hw2_train_val/train15000", grid_num=14, train=args.augment, transform=transforms.Compose([
             transforms.Resize((448, 448)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]))
 
-        testset  = dataset.MyDataset(root="hw2_train_val/val1500", size=1500, grid_num=14, train=False, transform=transforms.Compose([
+        testset  = dataset.MyDataset(root="hw2_train_val/val1500", grid_num=14, train=False, transform=transforms.Compose([
             transforms.Resize((448, 448)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -221,18 +198,14 @@ def main():
 
         model_improve = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7, save_name="Yolov1-Improve")
 
-    end = time.time()
-    logger.info("*** Training ended.")
-    logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, ((end - start) // 60) % 60, (end - start) % 60))
-
 if __name__ == "__main__":
     os.system("clear")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--load", type=str, help="Reload the model")
     parser.add_argument("--augment", action="store_true", help="Open the augment function")
-    parser.add_argument("--iou", type=float, default=0.5)
-    parser.add_argument("--prob", type=float, default=0.05)
+    parser.add_argument("--iou", type=float, default=0.5, help="Lower Bound of IOU value")
+    parser.add_argument("--prob", type=float, default=0.1, help="Lower Bound of Prob_obj")
     subparsers = parser.add_subparsers(required=True, dest="command")
 
     basic_parser = subparsers.add_parser("basic")
@@ -248,6 +221,5 @@ if __name__ == "__main__":
     improve_parser.add_argument("--worker", default=4, type=int, help="Set the workers")
     
     args = parser.parse_args()
-    print(args)
 
     main()

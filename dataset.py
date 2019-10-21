@@ -1,30 +1,28 @@
 import os
-import sys
-import os.path
-import time
 import random
+import sys
+import time
 
 import numpy as np
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
+import utils
 
 from PIL import Image, ImageEnhance, ImageFilter
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-from torch.utils.data import Dataset, DataLoader
-import utils
+from torch.utils.data import DataLoader, Dataset
+
+__all__ = ['MyDataset']
 
 class MyDataset(Dataset):
     classnames = utils.classnames
     labelEncoder = utils.labelEncoder
     oneHotEncoder = utils.oneHotEncoder
 
-    def __init__(self, root, size, grid_num=7, bbox_num=2, class_num=16, train=True, transform=None):
-        """ 
-        Save the imageNames and the labelNames and read in future.
-        """
+    def __init__(self, root, grid_num=7, bbox_num=2, class_num=16, train=True, transform=None):
+        """ Save the imageNames and the labelNames. """
         self.filenames = []
-        self.root      = root
         self.train     = train
         self.transform = transform
         self.grid_num  = grid_num
@@ -54,41 +52,32 @@ class MyDataset(Dataset):
         boxes, classIndexs = self.readtxt(labelName)
         
         if self.train:
-            pass
-
-            # image_2, boxes_2 = self.HorizontalFlip(image, boxes)
-            # image_3, boxes_3 = self.VerticalFlip(image, boxes)
-        
             image = self.RandomAdjustHSV(image, 0.95, 1.05)
-            # if random.random() < 0.5: image, boxes = self.ZoomIn(image, boxes, 1.1)
             if random.random() < 0.5: image, boxes = self.HorizontalFlip(image, boxes)
             if random.random() < 0.5: image, boxes = self.VerticalFlip(image, boxes)
             
         target = self.encoder(boxes, classIndexs, image.size)
         target = torch.from_numpy(target)
-        # target_2 = self.encoder(boxes_2), classIndexs, image.size)
-        # target_2 = torch.from_numpy(target_2)
-        # target_3 = self.encoder(boxes_3, classIndexs, image.size)
-        # target_3 = torch.from_numpy(target_3)
         
         if self.transform: 
             image = self.transform(image)
-            # image_2 = self.transform(image_2)
-            # image_3 = self.transform(image_3)
-        
-        # images = torch.cat((image.unsqueeze(0), image_2.unsqueeze(0), image_3.unsqueeze(0)), dim=0)
-        # targets = torch.cat((target.unsqueeze(0), target_2.unsqueeze(0), target_3.unsqueeze(0)), dim=0)
-        # return images, target
+
         return image, target, labelName
 
     def encoder(self, boxes, classindex, image_size):
         """
-        Args:
-          boxes:    [N, 4], contains [x1, y1, x2, y2] in integers
-          labels:   [N, self.class_num]
+        Parameters
+        ----------
+        boxes : numpy.array
+            [N, 4], contains [x1, y1, x2, y2] in integers
         
-        Return:
-          targets:  [self.grid_num, self.grid_num, self.class_num]
+        labels : numpy.array
+            [N, self.class_num]
+        
+        Return
+        ------
+        targets : numpy.array
+            [self.grid_num, self.grid_num, self.class_num]
         """
         image_size = np.asarray(image_size)
         image_size = np.concatenate((image_size, image_size), axis=0)
@@ -139,17 +128,21 @@ class MyDataset(Dataset):
         """ 
         Transfer the labels to the tensor. 
 
-        Args:
-          labelName: the label textfile to open
-          image_size: <tuple> the size to normalize 
+        Parameters
+        ----------
+        labelName: 
+            the label textfile to open
+        
+        image_size: <tuple> 
+            the size to normalize 
 
-        Return:
-          target: [7 * 7 * 26]
+        Return
+        ------
+        target: np.array
+            [7 * 7 * 26]
         """
         with open(labelName, "r") as textfile:
             labels = textfile.readlines()
-            # for label in labels:
-            #     print(label)
             labels = np.asarray("".join(labels).replace("\n", " ").strip().split()).reshape(-1, 10)
 
         classNames  = np.asarray(labels[:, 8])
@@ -160,28 +153,8 @@ class MyDataset(Dataset):
 
         return boxes, classIndexs
 
-    """
     def RandomAdjustHSV(self, img, min_f, max_f, prob=0.5):
-        if random.random() < prob:
-            factor = random.uniform(min_f, max_f)
-            img = ImageEnhance.Color(img).enhance(factor)            
-        
-        if random.random() < prob:
-            factor = random.uniform(min_f, max_f)
-            img = ImageEnhance.Brightness(img).enhance(factor)
-        
-        if random.random() < prob:
-            factor = random.uniform(min_f, max_f)
-            img = ImageEnhance.Contrast(img).enhance(factor)
-
-        if random.random() < prob:
-            factor = random.uniform(min_f, max_f)
-            img = ImageEnhance.Sharpness(img).enhance(factor)
-
-        return img
-    """
-
-    def RandomAdjustHSV(self, img, min_f, max_f, prob=0.5):
+        """ Augmentation Method: Adjust HSV"""
         if random.random() < prob:
             factor = random.uniform(min_f, max_f)
             choice = random.randint(0, 3)
@@ -198,6 +171,7 @@ class MyDataset(Dataset):
         return img
 
     def HorizontalFlip(self, im, boxes):
+        """ Augmentation Method: Horizontal Flip """
         im = im.transpose(Image.FLIP_LEFT_RIGHT)
         h, w = im.size
         xmin = w - boxes[:, 2]
@@ -208,6 +182,7 @@ class MyDataset(Dataset):
         return im, boxes
 
     def VerticalFlip(self, im, boxes):
+        """ Augmentation Method: Vertical Flip """
         im = im.transpose(Image.FLIP_TOP_BOTTOM)
         h, w = im.size
         ymin = h - boxes[:, 3]
@@ -218,8 +193,7 @@ class MyDataset(Dataset):
         return im, boxes
 
     def ZoomIn(self, im, boxes, scale):
-        assert scale > 1
-
+        """ Augmentation Method: Zoom In (Not Suggest) """
         h, w = im.size
         boundary = int(w * (scale - 1) / 2)
 
@@ -235,8 +209,7 @@ class Testset(Dataset):
         """ 
         Save the imageNames and the labelNames and read in future.
         """
-        self.filenames = []
-        self.img_root  = img_root
+        self.filenames = [ os.path.join(img_root, name) for name in os.listdir(img_root) ]
         self.transform = transform
         self.grid_num  = grid_num
         self.bbox_num  = bbox_num
@@ -258,40 +231,8 @@ class Testset(Dataset):
         
         return image, self.filenames[index].split(".")[0]
 
-def augment_unittest():
-    from predict import decode, labelEncoder
-
-    trainset = MyDataset(root="hw2_train_val/train15000", size=15000, train=True, transform=transforms.Compose([
-        transforms.Resize((448, 448)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]))
-    
-    train_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=0)
-
-    for _, target, _ in train_loader:
-        boxes, classIndexs, probs = decode(target, nms=True, prob_min=0.1, iou_threshold=0.5)
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long))
-
-        boxes = (boxes * 512).round()
-        rect  = torch.zeros(boxes.shape[0], 8)
-
-        # Extand (x1, y1, x2, y2) to (x1, y1, x2, y1, x2, y2, x1, y2)
-        rect[:,  :3] = boxes[:, :3]
-        rect[:, 3:6] = boxes[:, 1:]
-        rect[:, 6]   = boxes[:, 0]
-        rect[:, 7]   = boxes[:, 3]
-
-        # Return the probs to string lists
-        round_func = lambda x: round(x, 3)
-        probs = list(map(str, list(map(round_func, probs.data.tolist()))))
-        classNames = list(map(str, classNames))
-
-        for i in range(0, rect.shape[0]):
-            prob = probs[i]
-            className = classNames[i]
-
-            print(rect[i], className, prob)
+def main():
+    return
 
 if __name__ == "__main__":
-    augment_unittest()
+    main()

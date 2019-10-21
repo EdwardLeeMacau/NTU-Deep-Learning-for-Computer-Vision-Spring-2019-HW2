@@ -1,16 +1,128 @@
-import torch.nn as nn
 import math
+
 import torch
-import torch.utils.model_zoo as model_zoo
+import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.model_zoo as model_zoo
+import torchvision.models
 import utils
-from torch.autograd import Variable
 
 __all__ = ['vgg16_bn']
-model_urls = {'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',}
+
+model_urls = {
+    'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
+}
+
+model_urls = {
+    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
+    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
+    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
+    'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
+}
+
+class ResidualBlocks(nn.Module):
+    def __init__(self, in_channel, out_channel, stride=1, downsample=None, groups=1, base_width=64, norm_layer=None):
+        super(ResidualBlocks, self).__init__()
+
+        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=stride)
+        self.bn1   = nn.BatchNorm2d(out_channel)
+        self.relu  = nn.ReLU(inplace=True)
+
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3)
+        self.bn2   = nn.BatchNorm2d(out_channel)
+        self.relu  = nn.ReLU(inplace=True)
+        self.drop  = nn.Dropout2d(0.5, inplace=False)
+
+        self.stride = stride
+        self.downsample = downsample
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.drop(out)
+        
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+class Yolov1_ResNet(nn.Module):
+    def __init__(self, blocks):
+        super(Yolov1_ResNet, self).__init__()
+
+        # Implement ResNet Structure
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2)
+        self.bn1   = nn.BatchNorm2d(num_features=64)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.ResidualBlocks = blocks
+
+        # self.rb1 = ResidualBlocks(64, 64, stride=2)
+        # self.rb2 = ResidualBlocks(64, 64)
+        # self.rb3 = ResidualBlocks(64, 128, stride=2)
+        # self.rb4 = ResidualBlocks(128, 128)
+        # self.rb5 = ResidualBlocks(128, 256, stride=2)
+        # self.rb6 = ResidualBlocks(256, 256)
+        # self.rb7 = ResidualBlocks(256, 512, stride=2)
+        # self.rb8 = ResidualBlocks(512, 512)
+
+        # Implement Yolo detection
+        self.yolo = nn.Sequential(
+            nn.Linear(25088, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(4096, 1274)
+        )
+
+    def forward(self, x):
+        """
+          input_size:    n * 3 * 448 * 448
+          VGG16_bn:      n * 512 * 7 * 7
+          Flatten Layer: n * 25088
+          Yolo Layer:    n * 1274
+          Sigmoid Layer: n * 1274
+          Reshape Layer: n * 26 * 7 * 7
+        """
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+        
+        for block in self.ResidualBlocks:
+            x = block(x)
+            # print(x.shape, x.dtype)
+        
+        x = x.view(x.size(0), -1)
+        # print(x.shape, x.dtype)
+        
+        x = self.yolo(x)
+        # print(x.shape, x.dtype)
+        
+        x = torch.sigmoid(x) 
+        # print(x.shape, x.dtype)
+        
+        x = x.view(-1, 7, 7, 26)
+        # print(x.shape, x.dtype)
+        
+        return x
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
 
 class VGG(nn.Module):
     """
+    YOLO Implementation using VGG16 as BackBone
       input_size  = 448 * 448
       output_size = 7 * 7 * (5 * 2 + 16) = 1274
     """
@@ -39,20 +151,10 @@ class VGG(nn.Module):
         """
         # print(x.shape, x.dtype)
         
-        x = self.features(x)
-        # print(x.shape, x.dtype)
-        
-        x = x.view(x.size(0), -1)
-        # print(x.shape, x.dtype)
-        
+        x = self.features(x).view(x.size(0), -1)        
         x = self.yolo(x)
-        # print(x.shape, x.dtype)
-        
         x = torch.sigmoid(x) 
-        # print(x.shape, x.dtype)
-        
         x = x.view(-1, 7, 7, 26)
-        # print(x.shape, x.dtype)
         
         return x
 
@@ -139,9 +241,12 @@ class YoloLoss(nn.Module):
 
     def IoU(self, tensor1, tensor2):
         """
-        Args:
-          tensor1: [num_bbox, 10]
-          tensor2: [num_bbox, 10]
+        Calculate the Intersection of Union
+
+        Parameters
+        ----------
+        tensor1, tensor2: torch.tensor
+            [num_bbox, 10] [num_bbox, 10]
         """
         tensor1 = tensor1.type(torch.float)
         tensor2 = tensor2.type(torch.float)
@@ -176,15 +281,12 @@ class YoloLoss(nn.Module):
 
         area_1_1 = (tensor1[:, 2] - tensor1[:, 0]) * (tensor1[:, 3] - tensor1[:, 1])
         area_1_2 = (tensor1[:, 7] - tensor1[:, 5]) * (tensor1[:, 8] - tensor1[:, 6])
-        # print("area_1_1.shape: {}".format(area_1_1.shape))
-        # print("area_1_2.shape: {}".format(area_1_2.shape))
         area_1  = torch.cat((area_1_1.unsqueeze(1), area_1_2.unsqueeze(1)), dim=1).to(self.device)
-        # print("area_1.shape: {}".format(area_1.shape))
+        
         area_2_1 = (tensor2[:, 2] - tensor2[:, 0]) * (tensor2[:, 3] - tensor2[:, 1])
         area_2_2 = (tensor2[:, 7] - tensor2[:, 5]) * (tensor2[:, 8] - tensor2[:, 6])
         area_2  = torch.cat((area_2_1.unsqueeze(1), area_2_2.unsqueeze(1)), dim=1).to(self.device)
-        # print("area_2.shape: {}".format(area_2.shape))
-
+        
         iou = intersectionArea / (area_1 + area_2 - intersectionArea)
 
         return iou
@@ -204,16 +306,22 @@ class YoloLoss(nn.Module):
         """
         Default using cuda speedup.
 
-        Assumptions:
-          1. the gt contain 1 object only
-          2. 
+        The Loss of YOLO can be devided as 5 parts:
+        1. Class Loss
+        2. No Object Loss
+        3. Object Loss
+        4. Location Loss
+        5. Not Response Loss
 
-        Args:
-          output: [batchsize, 7, 7, 26]
-          target: [batchsize, 7, 7, 26]
-
-        Output:
-          loss: scalar
+        Parameters
+        ----------
+        output, target: torch.tensor
+            [batchsize, 7, 7, 26]
+          
+        Return
+        ------
+        loss: 
+            (...)
         """
         loss = 0
         batch_size = output.shape[0]
@@ -359,24 +467,26 @@ def Yolov1_vgg16bn(pretrained=False, **kwargs):
     """
     VGG 16-layer model (configuration "D") with batch normalization
     
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-            
-    Return:
-        yolo: the prediction model YOLO.
+    Parameters
+    ----------
+    pretrained : bool
+        If True, returns a model pre-trained on ImageNet
+        
+    Return
+    ------
+    yolo: 
+        The prediction model YOLO.
     """
-
-    # print(make_layers(cfg['D'], batch_norm=True))
-
     yolo = VGG(make_layers(cfg['D'], batch_norm=True), **kwargs)
 
-    vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
-    yolo_state_dict = yolo.state_dict()
-    for k in vgg_state_dict.keys():
-        if k in yolo_state_dict.keys() and k.startswith('features'):
-            yolo_state_dict[k] = vgg_state_dict[k]
-    
-    yolo.load_state_dict(yolo_state_dict)
+    if pretrained:
+        vgg_state_dict = model_zoo.load_url(model_urls['vgg16_bn'])
+        yolo_state_dict = yolo.state_dict()
+        for k in vgg_state_dict.keys():
+            if k in yolo_state_dict.keys() and k.startswith('features'):
+                yolo_state_dict[k] = vgg_state_dict[k]
+        
+        yolo.load_state_dict(yolo_state_dict)
     
     return yolo
 
@@ -404,54 +514,9 @@ def Yolov1_vgg16bn_Improve(pretrained=False, **kwargs):
     yolo.load_state_dict(yolo_state_dict)
     
     return yolo
-
-def model_structure_unittest():
-    device = utils.selectDevice(show=True)
-    model = Yolov1_vgg16bn_Improve(pretrained=True).to(device)
-
-    print(model)
     
-    img    = torch.rand(1, 3, 448, 448).to(device)
-    target = torch.rand(1, 14, 14, 26).to(device)
-    output = model(img)
-    
-    # print(output.size())
-    criterion = YoloLoss(14, 2, 5, 0.5, device)
-    loss = criterion(output, target)
+def main():
+    return
 
-    print("Loss: {}".format(loss))
-
-def loss_function_unittest():
-    import math
-    torch.set_default_dtype(torch.float)
-    
-    output = torch.zeros(1, 7, 7, 26)
-    target = torch.zeros_like(output)
-
-    obj   = torch.tensor([0.5, 0.5, 0.5, 0.5, 1])
-    noobj = torch.tensor([0.5, 0.5, 0.5, 0.5, 0])
-    classIndex = torch.tensor([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=torch.float)
-    target[:, 3, 3] = torch.cat((obj, obj, classIndex), dim=0)
-
-    predict_obj = torch.tensor([0.5, 0.5, 1., 1., 0.5])
-    classIndex = torch.tensor([0.9, 0.1, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
-    output[:, 3, 3] = torch.cat((predict_obj, predict_obj, classIndex), dim=0)
-
-    criterion = YoloLoss(7, 2, 5, 0.5, "cpu")
-    loss = criterion(output, target)
-
-    print("*** loss_function_unittest: {}".format(loss.item()))
-    print("*** loss_function_ref:")
-    print("*** noobj_confidnce_loss: {}".format(0))
-    print("*** obj_confidence_loss: {}".format((0.5 - 0.25) ** 2))
-    print("*** coord_xy_loss: {}".format(0))
-    print("*** coord_hw_loss: {}".format(5 * 2 * (math.sqrt(0.5) - math.sqrt(1)) ** 2))
-    print("*** noobj_confidence_loss: {}".format(0.5 * (0.5 - 1) ** 2))
-    print("*** class_loss: {}".format(2* 0.1 ** 2))
-    
 if __name__ == '__main__':
-    model_structure_unittest()
-    # loss_function_unittest()
-
-    # model = Yolov1_vgg16bn(pretrained=True).to(device)
-    # print(model)
+    main()

@@ -1,10 +1,18 @@
+"""
+  Filename    [ utlis.py ]
+  PackageName [ YOLOv1 ]
+  Synposis    [ Utility function of YOLOv1 ]
+"""
+
+import sys
+
 import numpy as np
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+
 import torch
 from torch import nn
 from torch import optim
 
-import sys
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 classnames = [
     'plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
@@ -23,10 +31,10 @@ def set_optimizer_lr(optimizer, lr):
     
     return optimizer
 
-def selectDevice(show=False):
+def selectDevice():
+    """ Check use GPU or CPU """
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
-    print("Device used: ", device)
 
     return device
 
@@ -73,7 +81,7 @@ def checkpointToModel(checkpoint_path: str, model_path: str):
 
     torch.save(newState, model_path)
     
-
+# TODO: Compare with model.YoloLoss()
 def IoU(box: torch.Tensor, remains: torch.Tensor):
     """
     Calcuate the IoU of the specific bbox and other boxes.
@@ -114,5 +122,8 @@ def IoU(box: torch.Tensor, remains: torch.Tensor):
 
     return iou
 
-if __name__ == "__main__":
+def main():
     checkpointToModel(sys.argv[1], sys.argv[2])
+
+if __name__ == "__main__":
+    main()
