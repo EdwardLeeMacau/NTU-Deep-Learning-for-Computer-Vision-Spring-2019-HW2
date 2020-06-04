@@ -83,14 +83,6 @@ class Yolov1_ResNet(nn.Module):
         )
 
     def forward(self, x):
-        """
-          input_size:    n * 3 * 448 * 448
-          VGG16_bn:      n * 512 * 7 * 7
-          Flatten Layer: n * 25088
-          Yolo Layer:    n * 1274
-          Sigmoid Layer: n * 1274
-          Reshape Layer: n * 26 * 7 * 7
-        """
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu1(x)
@@ -98,20 +90,12 @@ class Yolov1_ResNet(nn.Module):
         
         for block in self.ResidualBlocks:
             x = block(x)
-            # print(x.shape, x.dtype)
         
         x = x.view(x.size(0), -1)
-        # print(x.shape, x.dtype)
-        
         x = self.yolo(x)
-        # print(x.shape, x.dtype)
-        
-        x = torch.sigmoid(x) 
-        # print(x.shape, x.dtype)
-        
+        x = torch.sigmoid(x)
         x = x.view(-1, 7, 7, 26)
-        # print(x.shape, x.dtype)
-        
+ 
         return x
 
     def _initialize_weights(self):
@@ -121,11 +105,6 @@ class Yolov1_ResNet(nn.Module):
                 m.bias.data.zero_()
 
 class VGG(nn.Module):
-    """
-    YOLO Implementation using VGG16 as BackBone
-      input_size  = 448 * 448
-      output_size = 7 * 7 * (5 * 2 + 16) = 1274
-    """
     def __init__(self, features, output_size=1274, image_size=448):
         super(VGG, self).__init__()
         self.features = features
@@ -141,16 +120,6 @@ class VGG(nn.Module):
         self._initialize_weights()
 
     def forward(self, x):
-        """
-          input_size:    n * 3 * 448 * 448
-          VGG16_bn:      n * 512 * 7 * 7
-          Flatten Layer: n * 25088
-          Yolo Layer:    n * 1274
-          Sigmoid Layer: n * 1274
-          Reshape Layer: n * 26 * 7 * 7
-        """
-        # print(x.shape, x.dtype)
-        
         x = self.features(x).view(x.size(0), -1)        
         x = self.yolo(x)
         x = torch.sigmoid(x) 
@@ -165,10 +134,6 @@ class VGG(nn.Module):
                 m.bias.data.zero_()
 
 class VGG_Improve(nn.Module):
-    """
-      input_size  = 448 * 448
-      output_size = 7 * 7 * (5 * 2 + 16) = 1274
-    """
     def __init__(self, features, output_size=5096, image_size=448):
         super(VGG_Improve, self).__init__()
         self.features = features
@@ -195,32 +160,11 @@ class VGG_Improve(nn.Module):
         self._initialize_weights()
 
     def forward(self, x):
-        """
-          input_size:    n * 3 * 448 * 448
-          VGG16_bn:      n * 512 * 7 * 7
-          Flatten Layer: n * 25088
-          Yolo Layer:    n * 5096
-          Sigmoid Layer: n * 5096
-          Reshape Layer: n * 14 * 14 * 26
-        """
-        # print(x.shape, x.dtype)
-        
         x = self.features(x)
-        # print(x.shape, x.dtype)
-        
-        # x = x.view(x.size(0), -1)
-        # print(x.shape, x.dtype)
-        
         x = self.yolo(x)
         x = self.bn(x)
-        # print(x.shape, x.dtype)
-        
         x = torch.sigmoid(x) 
-        # print(x.shape, x.dtype)
-        
         x = x.permute(0, 2, 3, 1)
-        # x = x.view(-1, 14, 14, 26)
-        # print(x.shape, x.dtype)
         
         return x
 
@@ -412,11 +356,15 @@ class YoloLoss(nn.Module):
 # Using the configuration to make the layers
 def make_layers(cfg, batch_norm=False):
     """
-    Args:
-        cfg: the sequence configuration with ints and chars.
-        batch_norm: provide batch normalization layer
+    Parameters
+    ----------
+    cfg: the sequence configuration with ints and chars.
+    
+    batch_norm: provide batch normalization layer
 
-    Return:
+    Return
+    ------
+    model : nn.Module
         nn.Sequential(*layers): the model sequence
     """
     layers = []
@@ -494,11 +442,15 @@ def Yolov1_vgg16bn_Improve(pretrained=False, **kwargs):
     """
     VGG 16-layer model (configuration "D") with batch normalization
     
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    Parameters
+    ----------
+    pretrained : bool: 
+        If True, returns a model pre-trained on ImageNet
             
-    Return:
-        yolo: the prediction model YOLO.
+    Return
+    ------
+    yolo: nn.Module
+        the prediction model YOLO.
     """
 
     # print(make_layers(cfg['D'], batch_norm=True))
@@ -514,9 +466,3 @@ def Yolov1_vgg16bn_Improve(pretrained=False, **kwargs):
     yolo.load_state_dict(yolo_state_dict)
     
     return yolo
-    
-def main():
-    return
-
-if __name__ == '__main__':
-    main()

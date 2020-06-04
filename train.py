@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
+from torch.utils.tensorboard import SummaryWriter
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from torch.utils.data import DataLoader, Dataset
 
@@ -63,7 +64,8 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader,
             train_loss += loss.item()
 
             if (iteration % log_interval == 0):
-                logger.info("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(epoch, batch_idx * len(data), len(train_loader.dataset), 100. * batch_idx / len(train_loader), loss.item()))
+                print("Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
+                    epoch, batch_idx * len(data), len(train_loader.dataset), 100. * batch_idx / len(train_loader), loss.item()))
             iteration += 1
         
         train_loss /= iteration
@@ -73,8 +75,8 @@ def train(model, criterion, optimizer, scheduler, train_loader, val_loader,
         train_loss_list.append(train_loss)
         val_loss_list.append(val_loss)
         
-        logger.info("*** Train set - Average loss: {:.4f}".format(train_loss))
-        logger.info("*** Test set - Average loss: {:.4f}".format(val_loss))
+        print("*** Train set - Average loss: {:.4f}".format(train_loss))
+        print("*** Test set - Average loss: {:.4f}".format(val_loss))
         
         if epoch > 0:
             mean_ap = test_map(model, criterion, val_loader, device, grid_num=14)
@@ -125,6 +127,11 @@ def test_map(model, criterion, dataloader: DataLoader, device, grid_num):
     loader : torch.utils.data.DataLoader
 
     grid_num : 
+
+    Return
+    ------
+    mAP :
+        mAP score
     """
     model.eval()
     mean_ap = 0
@@ -139,36 +146,35 @@ def test_map(model, criterion, dataloader: DataLoader, device, grid_num):
             classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
             predict.export(boxes, classNames, probs, labelNames[0], outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
         
-        classaps, mean_ap = evaluation.scan_map()
+        classaps, mean_ap = evaluation.scan_map(
+            detpath="hw2_train_val/val1500/labelTxt_hbb_pred/",
+            annopath="hw2_train_val/val1500/labelTxt_hbb/"
+        )
 
     return mean_ap
 
 def main():
-    if args.command == "basic":
-        trainset = dataset.MyDataset(root="hw2_train_val/train15000", train=args.augment, transform=transforms.Compose([
-            transforms.Resize((448, 448)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]))
+    transform = transforms.Compose([
+        transforms.Resize((448, 448)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    grid_num = 7 if args.command == "basic" else 14
 
-        testset  = dataset.MyDataset(root="hw2_train_val/val1500", train=False, transform=transforms.Compose([
-            transforms.Resize((448, 448)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]))
+    trainset = dataset.MyDataset(
+        root="hw2_train_val/train15000", 
+        grid_num=grid_num,
+        train=args.augment, 
+        transform=transform
+    )
 
-    elif args.command == "improve":
-        trainset = dataset.MyDataset(root="hw2_train_val/train15000", grid_num=14, train=args.augment, transform=transforms.Compose([
-            transforms.Resize((448, 448)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]))
-
-        testset  = dataset.MyDataset(root="hw2_train_val/val1500", grid_num=14, train=False, transform=transforms.Compose([
-            transforms.Resize((448, 448)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]))
+    testset  = dataset.MyDataset(
+        grid_num=grid_num,
+        root="hw2_train_val/val1500", 
+        train=False, 
+        transform=transform
+    )
 
     trainLoader = DataLoader(trainset, batch_size=args.batchs, shuffle=True, num_workers=args.worker)
     testLoader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
@@ -199,8 +205,6 @@ def main():
         model_improve = train(model_improve, criterion, optimizer, scheduler, trainLoader, testLoader, start_epoch, args.epochs, device, lr=args.lr, grid_num=7, save_name="Yolov1-Improve")
 
 if __name__ == "__main__":
-    os.system("clear")
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--load", type=str, help="Reload the model")
     parser.add_argument("--augment", action="store_true", help="Open the augment function")

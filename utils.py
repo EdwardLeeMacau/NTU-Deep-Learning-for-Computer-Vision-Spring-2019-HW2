@@ -7,12 +7,9 @@
 import sys
 
 import numpy as np
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-
 import torch
-from torch import nn
-from torch import optim
-
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from torch import nn, optim
 
 classnames = [
     'plane', 'baseball-diamond', 'bridge', 'ground-track-field', 

@@ -43,19 +43,23 @@ def parse_gt(filename):
     return objects
 
 def voc_ap(rec, prec, use_07_metric=False):
-    """ 
-    ap = voc_ap(rec, prec, [use_07_metric])
-    
+    """     
     Compute VOC AP given precision and recall.
-    If use_07_metric is true, uses the
-    VOC 07 11 point method (default:False).
+    
+    If **use_07_metric** is true, uses the VOC 07 11 point method.
 
-    Args:
-      rec: recall
-      prec: precsion
+    Parameters
+    ----------
+    rec:  
+        recall
+    
+    prec: 
+        precsion
 
-    Return:
-      ap: average_precision
+    Return
+    ------
+    ap: 
+        average_precision
     """
     if use_07_metric:
         # 11 point metric
@@ -84,34 +88,38 @@ def voc_ap(rec, prec, use_07_metric=False):
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
 
-def voc_eval(detlist,
-             annopath,
-             imagenames,
-             classname,
-             ovthresh=0.5,
-             use_07_metric=False):
+def voc_eval(detlist, annopath, imagenames, classname, ovthresh=0.5, use_07_metric=False):
     """
-    rec, prec, ap = voc_eval(detpath,
-                             annopath,
-                             imagesetfile,
-                             classname,
-                             [ovthresh],
-                             [use_07_metric])
     Top level function that does the PASCAL VOC evaluation.
-    detpath: Path to detections
-        detpath.format(classname) should produce the detection results file.
-    annopath: Path to annotations
-        annopath.format(imagename) should be the xml annotations file.
-    imagesetfile: Text file containing the list of images, one image per line.
-    classname: Category name (duh)
-    [ovthresh]: Overlap threshold (default = 0.5)
-    [use_07_metric]: Whether to use VOC07's 11 point AP computation (default False)
 
+    Parameters
+    ----------
+    detpath : str
+        Path to detections. detpath.format(classname) should produce the detection results file.
+
+    annopath : str
+        Path to annotations. annopath.format(imagename) should be the xml annotations file.
+
+    imagesetfile :
+        Text file containing the list of images, one image per line.
+    
+    classname : 
+        Category name (duh)
+    
+    ovthresh : float
+        Overlap threshold (default = 0.5)
+
+    use_07_metric : bool
+        Whether to use VOC07's 11 point AP computation (default False)
+    
+    Return
+    ------
+    rec : 
+
+    prec :
+    
+    ap :
     """
-    # assumes detections are in detpath.format(classname)
-    # assumes annotations are in annopath.format(imagename)
-    # assumes imagesetfile is a text file with each line an image name
-    # cachedir caches the annotations in a pickle file
 
     # first load gt
     #if not os.path.isdir(cachedir):
@@ -235,6 +243,17 @@ def voc_eval(detlist,
     return rec, prec, ap
 
 def readdet(detpath, imagenames, classnames):
+    """
+    Parameters
+    ----------
+    detpath : str
+        Path to detections. detpath.format(classname) should produce the detection results file.
+
+    imagenames : str
+    
+    classnames : str
+
+    """
     output_det = {x:[] for x in classnames}
 
     # read dets
@@ -251,7 +270,18 @@ def readdet(detpath, imagenames, classnames):
 
     return output_det
 
-def scan_map(detpath="hw2_train_val/val1500/labelTxt_hbb_pred/", annopath="hw2_train_val/val1500/labelTxt_hbb/"):
+def scan_map(detpath, annopath):
+    """
+    Top level function that does the PASCAL VOC evaluation.
+
+    Parameters
+    ----------
+    detpath : str
+        Path to detections. detpath.format(classname) should produce the detection results file.
+
+    annopath : str
+        Path to annotations. annopath.format(imagename) should be the xml annotations file.
+    """
     imagenames = [x.split('.')[0] for x in os.listdir(annopath) if x.endswith('.txt')]
     detpath = os.path.join(detpath, '{:s}.txt')
     annopath = os.path.join(annopath, '{:s}.txt')
@@ -285,20 +315,7 @@ def scan_map(detpath="hw2_train_val/val1500/labelTxt_hbb_pred/", annopath="hw2_t
 
     return classaps, map
 
-def main():
-    """ 
-      PredictionDir: hw2_train_val/val1500/labelTxt_hbb_pred/
-      AnnotationDir: hw2_train_val/val1500/labelTxt_hbb/
-    
-    Implementation:
-    1. Remove the detpath
-    2. det = readdet(detpath, imagenames, classnames)
-    3. Finish
-    """
-
-    # detpath  = posixpath.join(sys.argv[1], '{:s}.txt')
-    # annopath = posixpath.join(sys.argv[2], '{:s}.txt')
-    
+def main():    
     detpath  = os.path.join(sys.argv[1], '{:s}.txt')
     annopath = os.path.join(sys.argv[2], '{:s}.txt')
     imagenames = [x.split('.')[0] for x in os.listdir(sys.argv[2]) if x.endswith('.txt')]

@@ -4,9 +4,9 @@
   Synposis     [  ]
 """
 
-import sys
-import os
 import argparse
+import os
+import sys
 
 import cv2
 import numpy as np
@@ -50,31 +50,6 @@ def parse_det(detfile):
     
     return result 
 
-def scan_folder(img_folder, det_folder, out_folder, size):
-    """ 
-    Scan the folder and make all photo with grids. 
-    
-    Parameters
-    ----------
-    img_folder, det_folder, out_folder : str
-        (...)
-
-    size : int
-        The size of dataset
-    """
-    
-    for i, name in enumerate(os.listdir(img_folder), 1):
-        if (i % 100) == 0:  
-            print(i)
-        index = name.split(".")[0]
-
-        imgfile = os.path.join(img_folder, index+".jpg")
-        detfile = os.path.join(det_folder, index+".txt")
-
-        visualize(imgfile, detfile, os.path.join(out_folder, index+".jpg"))
-
-    return
-
 def visualize(imgfile, detfile, outputfile):
     """
     Draw the bbox on 1 image
@@ -109,30 +84,53 @@ def visualize(imgfile, detfile, outputfile):
 
     return
 
-def main():
-    """ Scan the whole folder. """
-    imgfile = os.path.join(args.root, "images")
-    detfile = os.path.join(args.root, "labelTxt_hbb_pred_sh")
-    outfile = os.path.join(args.root, "images_pred")
+def scan_folder(img_folder, det_folder, out_folder, size):
+    """ 
+    Scan the folder and make all photo with grids. 
     
-    if not os.path.exists(outfile):
-        os.mkdir(outfile)
+    Parameters
+    ----------
+    img_folder, det_folder, out_folder : str
+        (...)
 
-    scan_folder(imgfile, detfile, outfile, args.number)
+    size : int
+        The size of dataset
+    """
+    
+    for i, name in enumerate(os.listdir(img_folder), 1):
+        if (i % 100) == 0:  
+            print(i)
+        index = name.split(".")[0]
 
-if __name__ == '__main__':
+        imgfile = os.path.join(img_folder, index+".jpg")
+        detfile = os.path.join(det_folder, index+".txt")
+
+        visualize(imgfile, detfile, os.path.join(out_folder, index+".jpg"))
+
+    return
+
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=str, default="./hw2_train_val/val1500", help="The root folder of the img/det. ")
     parser.add_argument("--number", type=int, default=1500)
+    
     subparsers = parser.add_subparsers(required=True, dest="command")
-
     compare_parser = subparsers.add_parser("compare")
     drawdet_parser = subparsers.add_parser("drawdet")
 
     args = parser.parse_args()
 
     if args.command == "drawdet":
-        main()
+        """ Scan the whole folder. """
+        imgfile = os.path.join(args.root, "images")
+        detfile = os.path.join(args.root, "labelTxt_hbb_pred_sh")
+        outfile = os.path.join(args.root, "images_pred")
+        
+        if not os.path.exists(outfile):
+            os.mkdir(outfile)
+
+        scan_folder(imgfile, detfile, outfile, args.number)
 
     elif args.command == "compare":
         """ Code from Ugo Tan """
@@ -179,3 +177,6 @@ if __name__ == '__main__':
             final = cv2.hconcat((final_pad, gt_image))
 
             cv2.imwrite(os.path.join(outputfolder, img_det_name+'_merge.jpg'), image)
+
+if __name__ == '__main__':
+    main()

@@ -5,7 +5,9 @@
 """
 
 import os
+from collections import Counter
 
+import numpy as np
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
@@ -14,66 +16,56 @@ import dataset
 import models
 import predict
 import utils
-import visualize_bbox
+from visualize_bbox import visualize
 
 
 def draw_bbox():
-    """ Draw the boundary box with the textfile message"""
-    images = ["0076", "0086", "0907"]
-    
-    for img in images:
-        imgpath = os.path.join("hw2_train_val", "val1500", "images", img+".jpg")
-        detpath = os.path.join("hw2_train_val", "val1500", "labelTxt_hbb_pred", img+".txt")
+    """ Draw the boundary box with the textfile message"""    
+    for img in ("0076", "0086", "0907"):
+        imgpath = os.path.join("hw2_train_val", "val1500", "images", img + ".jpg")
+        detpath = os.path.join("hw2_train_val", "val1500", "labelTxt_hbb_pred", img + ".txt")
         outpath = img + ".jpg"
 
-        visualize_bbox.visualize(imgpath, detpath, outpath)
+        visualize(imgpath, detpath, outpath)
 
-def count_class(dataloader: DataLoader):
+# TODO: Rewrite the function using textReader
+def count_class(detpath):
     """ 
-    Count the time of appreance of each class in the Dataset 
+    Count the number of bbox for each categories in dataset
 
     Parameters
     ----------
-    dataloader : DataLoader
-        The dataset to be count
+    detpath : str
 
     Return
     ------
-    labels : list
-
-    counts : list
-
+    counter : Counter
     """
-    labelEncoder = utils.labelEncoder
-    labels = labelEncoder.inverse_transform(
-        torch.linspace(0, 15, steps=16).type(torch.long).unsqueeze(-1)
-    )
-    counts = torch.zeros(16, dtype=torch.long)
+    counter = Counter()
+    detfiles = os.listdir(detpath)
 
-    for index, (_, target, _) in enumerate(trainLoader, 1):
-        class_onehot = target[:, :, :, 10:].type(torch.long)
-        count = class_onehot.sum(0).sum(0).sum(0)
-        
-        counts += count
+    for idx, fname in enumerate(detfiles, 1):
+        print("Predicted: [{}/{} ({:.2%})]\r".format(
+            idx, len(detfiles), idx / len(detfiles)), end=""
+        )
+        with open(os.path.join(detpath, fname), "r") as textfile:
+            labels = "".join(textfile.readlines()).replace("\n", " ").strip().split()
+            labels = np.asarray(labels).reshape(-1, 10)
 
-    labels = labels.data.tolist()
+            # Instance Counter
+            classNames  = np.asarray(labels[:, 8])
+            counter.update(classNames)
+            
+            # TODO: Size Statistics
+            boxes = np.asarray(labels[:, :8]).astype(np.float)
+            boxes = np.concatenate((boxes[:, :2], boxes[:, 4:6]), axis=1)
 
-    return labels, counts.data.tolist()
+    return counter
 
 def main():
     """ HW2 Question 6 """
-    trainset = dataset.MyDataset(
-        root="hw2_train_val/train15000", 
-        grid_num=14, 
-        train=False, 
-        transform=transforms.ToTensor()
-    )
-    trainLoader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=0)
-    
-    labels, counts = count_class(trainLoader)
-
-    with open("dataset_information", "w") as textfile:
-        textfile.write(counts)
+    counter = count_class(os.path.join("hw2_train_val", "train15000", "labelTxt_hbb"))
+    print(counter)
 
 if __name__ == "__main__":
     main()

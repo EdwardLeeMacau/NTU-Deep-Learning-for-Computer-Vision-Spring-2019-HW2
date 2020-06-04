@@ -1,5 +1,8 @@
-
-
+"""
+  Filename    [ improve_models.py ]
+  PackageName [ YOLOv1 ]
+  Synposis    [ Deprecated: To be moved to model.py ]
+"""
 
 import torch
 import torch.nn as nn

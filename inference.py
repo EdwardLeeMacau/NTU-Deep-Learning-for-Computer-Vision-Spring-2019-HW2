@@ -1,8 +1,11 @@
+"""
+  Filename    [ predict.py ]
+  PackageName [ YOLOv1 ]
+  Synposis    [  ]
+"""
+
 import argparse
-import logging
-import logging.config
 import os
-import pdb
 import random
 import time
 
@@ -11,18 +14,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import torchvision
-import torchvision.transforms as transforms
-from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 import dataset
 import models
+import torchvision
+import torchvision.transforms as transforms
 import utils
-
-
-logging.config.fileConfig("logging.ini")
-logger = logging.getLogger(__name__)
+from PIL import Image
 
 classnames = utils.classnames
 labelEncoder  = utils.labelEncoder
@@ -30,12 +29,17 @@ oneHotEncoder = utils.oneHotEncoder
 
 def decode(output: torch.Tensor, nms=True, prob_min=0.1, iou_threshold=0.5, grid_num=7, bbox_num=2, class_num=16):
     """
-    Args:
-      output: [batch_size, grid_num, grid_num, 5 * bbox_num + class_num]
+    Parameters
+    ----------
+    output: torch.Tensor
+        shape: [batch_size, grid_num, grid_num, 5 * bbox_num + class_num]
     
-    Return:
-      keep_boxes: <list of list>
-      classNames: <list of list>
+    Return
+    -------
+    keep_boxes: <list of list>
+
+    classNames: <list of list>
+
     """
     boxes, classIndexs, probs = [], [], []
     cell_size   = 1. / grid_num
@@ -110,12 +114,19 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
     """
     Not generalize to multi-img processing, only 1 in 1 out.
 
-    Args:
-      boxes:  [N, 4], (x1, y1, x2, y2)
-      scores: [N]
+    Parameters
+    ----------
+    boxes : torch.Tensor
+        [N, 4], (x1, y1, x2, y2)
+    scores : torch.Tensor
+        [N]
+    iou_threshold : float
+        [1]
     
-    Return:
-      keep_boxes: [x]
+    Return
+    ------
+    keep_boxes : 
+        [x]
     """    
     _, index = scores.sort(descending=True)
     keep_boxes = []
@@ -200,19 +211,13 @@ def export(boxes, classNames, probs, labelName, outputpath, image_size=512.):
             textfile.write(" ".join((className, prob)) + "\n")
 
 def main():
-    """
-    Workflow:
-    1.  Image to tensors
-    2.  Predict form tensors
-        2.1 Supress the bbox that doesn't contain object (by prob_min)
-        2.2 Execute NMS (by nonMaximumSupression)
-        3.3 Return the bbox, classnames and probs
-    3.  Output File if needed.
-    4.  MAP calculation. 
-    """
+    if not os.path.exists(args.output): 
+        os.mkdir(args.output)
 
     torch.set_default_dtype(torch.float)
     device = utils.selectDevice()
+
+    # Initialize model
 
     if args.command == "basic":
         model = models.Yolov1_vgg16bn(pretrained=True).to(device)
@@ -222,24 +227,19 @@ def main():
     model = utils.loadModel(args.model, model)
     model.eval()
     
-    # trainset = MyDataset(root="hw2_train_val/train15000", size=15000, train=False, transform=transforms.Compose([
-    #     transforms.Resize((448, 448)),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # ]))
+    # Initialize dataset
 
-    # TODO: Reset as MyDataset
-    testset  = dataset.Testset(img_root=args.images, transform=transforms.Compose([
+    transform = transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]))
+    ])
 
-    test_loader = DataLoader(testset, batch_size=1, shuffle=False, num_workers=args.worker)
+    # TODO: Reset as MyDataset
+    testset = dataset.Testset(img_root=args.images, transform=transform)
+    test_loader = DataLoader(testset, batch_size=1, shuffle=False, num_workers=4)
 
-    # Return the imageName for storing the predict_msg
-    if not os.path.exists(args.output): 
-        os.mkdir(args.output)
+    # Iterative interference
 
     for batch_idx, (data, imgName) in enumerate(test_loader, 1):
         data = data.to(device)
@@ -254,25 +254,21 @@ def main():
         
         export(boxes, classNames, probs, imgName[0] + ".txt", args.output)
         
-        if batch_idx % 100 == 0:
-            print("Predicted: [{}/{} ({:.0f}%)]".format(batch_idx, len(test_loader.dataset), 100. * batch_idx / len(test_loader.dataset)))
-            
-if __name__ == "__main__":
-    os.system("clear")
+        print("Predicted: [{}/{} ({:.2%})]\r".format(
+            batch_idx, len(test_loader.dataset), batch_idx / len(test_loader.dataset)), end=""
+        )
 
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="Set the trained model")
-    parser.add_argument("--worker", default=0, type=int)
     parser.add_argument("--images", type=str)
     parser.add_argument("--output", type=str)
     parser.add_argument("--nms", action="store_true", help="Open nms")
     parser.add_argument("--iou", default=0.5, type=float, help="NMS iou_threshold")
     parser.add_argument("--prob", default=0.1, type=float, help="NMS prob_min, pick up the bbox with the class_prob > prob_min")
     
-    subparsers = parser.add_subparsers(required=True, dest="command")
-    
+    subparsers = parser.add_subparsers(required=True, dest="command")    
     basic_parser = subparsers.add_parser("basic")
-    
     improve_parser = subparsers.add_parser("improve")
 
     args = parser.parse_args()

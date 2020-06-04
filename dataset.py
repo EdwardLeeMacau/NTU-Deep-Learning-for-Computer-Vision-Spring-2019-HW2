@@ -1,3 +1,9 @@
+"""
+  Filename     [ dataset.py ]
+  PackageName  [ DLCV Spring 2019 - YOLOv1 ]
+  Synposis     [ DataLoader of the aerial dataset ]
+"""
+
 import os
 import random
 import sys
@@ -7,11 +13,11 @@ import numpy as np
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
-import utils
-
 from PIL import Image, ImageEnhance, ImageFilter
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from torch.utils.data import DataLoader, Dataset
+
+import utils
 
 __all__ = ['MyDataset']
 
@@ -40,10 +46,8 @@ class MyDataset(Dataset):
             
             self.filenames.append((imageName, labelName))
         
-        self.len = len(self.filenames)
-
     def __len__(self):
-        return self.len
+        return len(self.filenames)
 
     def __getitem__(self, index):
         imageName, labelName = self.filenames[index]
@@ -90,20 +94,6 @@ class MyDataset(Dataset):
        
         ij = (np.ceil(centerXY / cell_size) - 1).astype(int)
         
-        """
-        i, j = ij[:, 0], ij[:, 1]
-        target[j, i, 4] = 1
-        target[j, i, 9] = 1
-        target[j, i, classindex + 10] = 1
-
-        cornerXY = ij * cell_size
-        deltaXY  = (centerXY - cornerXY) / cell_size
-        target[j, i, 2:4] = wh
-        target[j, i,  :2] = deltaXY
-        target[j, i, 7:9] = wh
-        target[j, i, 5:7] = deltaXY
-        """
-
         # Confidence
         for index, (i, j) in enumerate(ij):
             # print("Index: {}, i: {}, j: {}".format(index, i, j))
@@ -130,12 +120,9 @@ class MyDataset(Dataset):
 
         Parameters
         ----------
-        labelName: 
+        labelName: str
             the label textfile to open
         
-        image_size: <tuple> 
-            the size to normalize 
-
         Return
         ------
         target: np.array
@@ -154,7 +141,7 @@ class MyDataset(Dataset):
         return boxes, classIndexs
 
     def RandomAdjustHSV(self, img, min_f, max_f, prob=0.5):
-        """ Augmentation Method: Adjust HSV"""
+        """ Augmentation Method: Adjust HSV """
         if random.random() < prob:
             factor = random.uniform(min_f, max_f)
             choice = random.randint(0, 3)
@@ -206,26 +193,18 @@ class MyDataset(Dataset):
 
 class Testset(Dataset):
     def __init__(self, img_root, grid_num=7, bbox_num=2, class_num=16, transform=None):
-        """ 
-        Save the imageNames and the labelNames and read in future.
-        """
+        """ Save the imageNames and the labelNames and read in future. """
         self.filenames = [ os.path.join(img_root, name) for name in os.listdir(img_root) ]
         self.transform = transform
         self.grid_num  = grid_num
         self.bbox_num  = bbox_num
         self.class_num = class_num
 
-        self.filenames = os.listdir(img_root)
-        self.len = len(self.filenames)
-
     def __len__(self):
-        return self.len
+        return len(self.filenames)
 
     def __getitem__(self, index):
-        imageName = os.path.join(self.img_root, self.filenames[index])
-
-        image = Image.open(imageName)
-
+        image = Image.open(self.filenames[index])
         if self.transform: 
             image = self.transform(image)
         
