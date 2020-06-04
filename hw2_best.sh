@@ -1,7 +1,9 @@
 # TODO: create shell script for running your YoloV1-vgg16bn model
 
 # Download the model
-wget -O Yolov1-Improve.pth https://www.dropbox.com/s/x4jb5zd3sxiu8rf/Yolov1-Improve.pth?dl=0
+if [ ! -f "Yolov1-Improve.pth" ]; then
+    wget -O Yolov1-Improve.pth https://www.dropbox.com/s/x4jb5zd3sxiu8rf/Yolov1-Improve.pth?dl=0
+fi
 
 # Run predict.py
 # $1 Image directory

@@ -4,23 +4,57 @@ Model: Yolov1
 
 ## Demonstration
 
-Using naive model
 
-![](./demo/0076-naive.jpg)
 
-![](./demo/0086-naive.jpg)
+<table>
+<caption><h3>Using naive model</h3></caption>
+<tr>
+    <td><img src="./demo/0076-naive.jpg"></td>
+    <td><img src="./demo/0086-naive.jpg"></td>
+    <td><img src="./demo/0907-naive.jpg"></td>
+</tr>
+</table>
 
-![](./demo/0907-naive.jpg)
+<table>
+<caption><h3>Using improve model</h3></caption>
+<tr>
+    <td><img src="./demo/0076-improve.jpg"></td>
+    <td><img src="./demo/0086-improve.jpg"></td>
+    <td><img src="./demo/0907-improve.jpg"></td>
+</tr>
+</table>
 
-Using improve model
+## How to use
 
-![](./demo/0076-improve.jpg)
+1. Download dataset
 
-![](./demo/0086-improve.jpg)
+    ```
+    bash get_dataset.sh
+    ```
 
-![](./demo/0907-improve.jpg)
+2. Download pretrained model and inference
 
-## Question 1: Architecture and Hyperparameters
+    ```
+    bash hw2.sh
+    ```
+
+3. Download pretrained improved model and inference
+
+    ```
+    bash hw2_best.sh
+    ```
+
+## Requirements
+
+Because I have reconstructed the project using tensorboard (pytorch-1.4.0~), so it's not compatiable in older version.
+
+## More Information
+
+Please read [requirement](./REQUIREMENT.md) to get more information about this HW.
+
+## Performance Report
+
+### Question 1: Architecture and Hyperparameters
 
 Model structure
 
@@ -58,7 +92,7 @@ Augmentation:
 
 Final Result:
 
-## Question 3: Improve Architecture and Hyperparameters
+### Question 3: Improve Architecture and Hyperparameters
 
 Model structure
 
@@ -88,14 +122,14 @@ Augmentation:
 
 Final Result:
 
-## Question 5: mAP score
+### Question 5: mAP score
 
 |  Model  | mAP score |  IoU  | $P_{min}$ |
 | :-----: | :-------: | :---: | :-------: |
 |  basic  |  10.55%   |  0.5  |   0.05    |
 | improve |  11.76%   |  0.5  |   0.05    |
 
-## Question 6: Statistic of Dataset
+### Question 6: Statistic of Dataset
 
 |      Category      | Final AP (Base) | Final AP (Improve) | Number in train15000 |
 | :----------------: | :-------------: | :----------------: | :------------------: |
