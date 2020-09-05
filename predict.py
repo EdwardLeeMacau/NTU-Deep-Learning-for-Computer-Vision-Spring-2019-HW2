@@ -299,16 +299,25 @@ def main():
     model = utils.loadModel(cmdparse.args.model, model)
     print("Read Model: {}".format(cmdparse.args.model))
     
+    trainset  = MyDataset(root="hw2_train_val/train15000", train=False, size=15000, transform=transforms.Compose([
+        transforms.Resize((448, 448)),
+        transforms.ToTensor()
+    ]))
+
     testset  = MyDataset(root="hw2_train_val/val1500", train=False, size=1500, transform=transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor()
     ]))
 
+    trainset_loader = DataLoader(trainset, batch_size=1, shuffle=False, num_workers=4)
     testset_loader  = DataLoader(testset, batch_size=1, shuffle=False, num_workers=4)
 
     # Return the imageName for storing the predict_msg
     if not os.path.exists(cmdparse.args.output):
         os.mkdir(cmdparse.args.output)
+
+    if not os.path.exists("hw2_train_val/train15000/labelTxt_hbb_pred"):
+        os.mkdir("hw2_train_val/train15000/labelTxt_hbb_pred")
 
     for _, (data, target, labelName) in enumerate(testset_loader):
         data, target = data.to(device), target.to(device)
@@ -319,9 +328,23 @@ def main():
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
         # Write the output file
-        if args.export: 
+        if cmdparse.args.export: 
             export(boxes, classNames, probs, labelName[0])
             logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
+
+    for _, (data, _, labelName) in enumerate(trainset_loader):
+        data = data.to(device)
+
+        output = model(data)
+        boxes, classIndexs, probs = decode(output, prob_min=0.05, iou_threshold=0.5, grid_num=7, bbox_num=2)
+
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+
+        # Write the output file
+        if cmdparse.args.export:
+            export(boxes, classNames, probs, labelName[0], outputpath="hw2_train_val/train15000/labelTxt_hbb_pred")
+            logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
+
         
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))

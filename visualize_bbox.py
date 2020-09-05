@@ -61,7 +61,7 @@ def parse_det(detfile):
     return result 
 
 def scan_folder(img_folder, det_folder, out_folder, size):
-    length = len(size)
+    length = len(str(size))
 
     for i in range(0, size):
         index = str(i).zfill(length)
@@ -95,7 +95,7 @@ def main():
     if not os.path.exists(outfile):
         os.mkdir(outfile)
 
-    scan_folder(imgfile, detfile, outfile, 1500)
+    scan_folder(imgfile, detfile, outfile, 15000)
 
 if __name__ == '__main__':
     main()
