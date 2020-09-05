@@ -250,6 +250,8 @@ class YoloLoss(nn.Module):
 
         # 2.3 Compute the loss of class loss
         # print("class_loss: {}".format(F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)))
+        coord_predict = coord_predict.type(torch.float)
+        coord_target  = coord_target.type(torch.float)
         loss += F.mse_loss(coord_predict[:, 10:], coord_target[:, 10:], size_average=False)
 
         # Output the normalized loss

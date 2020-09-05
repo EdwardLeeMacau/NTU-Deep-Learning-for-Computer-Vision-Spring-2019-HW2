@@ -79,12 +79,12 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
             for b in range(2):
                 if mask[i, j, b] == 1:
                     box = output[i, j, b * 5: b * 5 + 4]
-                    contain_prob = torch.FloatTensor([output[i, j, b * 5 + 4]])
+                    contain_prob = output[i, j, b*5+4].type(torch.float)
+                    # contain_prob = torch.FloatTensor([output[i, j, b * 5 + 4]])
                         
                     # Recover the base of xy as image_size
-                    
-                    xy = torch.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
-                    # xy = torch.cuda.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
+                    xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
+                    # xy = torch.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
                         
                     # print("xy.shape: {}".format(xy.shape))
                     # print("xy: {}".format(xy))
@@ -99,12 +99,18 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
                     # print("max_prob.shape: {}".format(max_prob.shape))
                     # print("max_prob: {}".format(max_prob))
 
-                    # print(float((contain_prob * max_prob)[0]))
-                    if float((contain_prob * max_prob)[0]) > 0.1:
+                    # print(contain_prob)
+                    # print(max_prob)
+                    
+                    if float((contain_prob * max_prob).item()) > prob_min:
                         classIndex = classIndex.unsqueeze(0)
                         boxes.append(box_xy.view(1, 4))
                         classIndexs.append(classIndex)
-                        probs.append(contain_prob * max_prob)
+                        probs.append((contain_prob * max_prob).view(1))
+
+    # print(boxes)
+    # print(probs)
+    # print(classIndexs)
 
     if len(boxes) == 0:
         boxes = torch.zeros((1,4))
@@ -115,6 +121,10 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
         probs = torch.cat(probs, 0) #(n,)
         classIndexs = torch.cat(classIndexs, 0) #(n,)
     
+    # print(boxes)
+    # print(probs)
+    # print(classIndexs)
+
     keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
 
     return boxes[keep_index], classIndexs[keep_index], probs[keep_index]
@@ -131,6 +141,7 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
       keep_boxes: [x]
     """    
     _, index = scores.sort(descending=True)
+    # print(index)
     keep_boxes = []
     
     x1 = boxes[:, 0]
@@ -142,11 +153,18 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
 
     # 1 image case first
     while index.numel() > 0:
-        i = index[0]
-        keep_boxes.append(i)
+        # print(index)
+        # print(index[0].item())
+        # i = index[0].item()
+        # keep_boxes.append(i)
 
         # Check if it is the last bbox: break
-        if index.numel() == 1:  break
+        if index.numel() == 1:  
+            keep_boxes.append(index.item())
+            break
+        
+        i = index[0].item()
+        keep_boxes.append(i)
         
         # Check index runs well
         # print("x1[index[1:]] {}".format(x1[index[1:]]))
@@ -164,7 +182,9 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
         # print("IoU: {}".format(IoU(boxes[i], boxes[index[1: ]])))
         ovr = inter / (areas[i] + areas[index[1:]] - inter)
         # print("Ovr: {}".format(ovr))
+        # Supress the bbox where overlap area > iou_threshold, return the remain index
         ids = (ovr <= iou_threshold).nonzero().squeeze()
+        # print(ids)
         # IoU calculated.
 
         # print("ids.shape: {}".format(ids.shape))
@@ -174,7 +194,7 @@ def nonMaximumSupression(boxes: torch.Tensor, scores: torch.Tensor, iou_threshol
         if ids.numel() == 0: break
         index = index[ids + 1]
 
-    return torch.LongTensor(keep_boxes)
+    return torch.tensor(keep_boxes, dtype=torch.long)
 
 def IoU(box: torch.Tensor, remains: torch.Tensor):
     """
@@ -241,7 +261,7 @@ def export(boxes, classNames, probs, labelName, outputpath="hw2_train_val/val150
     probs = list(map(str, list(map(round_func, probs.data.tolist()))))
     classNames = list(map(str, classNames))
 
-    with open(os.path.join(outputpath, labelNames.split("/")[-1]), "w") as textfile:
+    with open(os.path.join(outputpath, labelName.split("/")[-1]), "w") as textfile:
         for i in range(0, rect.shape[0]):
             prob = probs[i]
             className = classNames[i]
@@ -269,6 +289,7 @@ def main():
         2.1 Supress the bbox that doesn't contain object (by prob_min)
         2.2 Execute NMS (by nonMaximumSupression)
     """
+    os.system("clear")
     start = time.time()
 
     torch.set_default_dtype(torch.float)
@@ -298,8 +319,9 @@ def main():
         classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
 
         # Write the output file
-        if cmdparse.args.export: 
+        if args.export: 
             export(boxes, classNames, probs, labelName[0])
+            logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
         
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))

@@ -103,12 +103,16 @@ def test(model, dataloader: DataLoader, device):
             test_loss += criterion(output, target).item()
 
     # Calculate the map value
-    for data, target, labelNames in dataloader:
-        boxes, classIndexs, probs = predict.predict(data, model)
-        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
-        predict.export(boxes, classNames, labelNames)
+    # for data, target, labelNames in dataloader:
+    #    boxes, classIndexs, probs = predict.predict(data, model)
+    #    classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
+    #     predict.export(boxes, classNames, labelNames)
     
-    classaps, mean_ap = evaluation.scan_map()
+    # mean_average_precision = evaluation.main()
+
+    test_loss /= len(dataloader.dataset)
+    logger.info("*** Test set - Average loss: {:.4f} \n".format(test_loss))
+    # logger.info("*** Test set - MAP: {:.4f} \n".format(mean_average_precision))
 
     # test_loss /= len(dataloader.dataset)
     logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))
@@ -136,7 +140,7 @@ def main():
 
     device = selectDevice(show=True)
     model  = models.Yolov1_vgg16bn(pretrained=True).to(device)
-    model  = train(model, trainLoader, testLoader, 30, device, lr=0.001, log_interval=10, save_interval=0)
+    model  = train(model, trainLoader, testLoader, 30, device, lr=0.0001, log_interval=10, save_interval=0)
 
     end = time.time()
     logger.info("*** Training ended.")
@@ -152,4 +156,5 @@ def main():
     # logger.info("Used Time: {} hours {} min {:.0f} s".format((end - start) // 3600, (end - start) // 60, (end - start) % 60))
 
 if __name__ == "__main__":
+    os.system("clear")
     main()
