@@ -1,6 +1,6 @@
 """
   Filename    [ predict.py ]
-  PackageName [ YOLOv1 ]
+  PackageName [ DLCV Spring 2019 - YOLOv1 ]
   Synposis    [  ]
 """
 

@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader, Dataset
 import dataset
 import evaluation
 import models
-import predict
+import inference
 import utils
 
 classnames    = utils.classnames
