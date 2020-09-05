@@ -103,16 +103,12 @@ def test(model, dataloader: DataLoader, device):
             test_loss += criterion(output, target).item()
 
     # Calculate the map value
-    # for data, target, labelNames in dataloader:
-    #    boxes, classIndexs, probs = predict.predict(data, model)
-    #    classNames = labelEncoder.inverse_transform(classIndexs.type(torch.LongTensor).to("cpu"))
-    #     predict.export(boxes, classNames, labelNames)
-    
-    # mean_average_precision = evaluation.main()
-
-    test_loss /= len(dataloader.dataset)
-    logger.info("*** Test set - Average loss: {:.4f} \n".format(test_loss))
-    # logger.info("*** Test set - MAP: {:.4f} \n".format(mean_average_precision))
+    for data, target, labelNames in dataloader:
+        boxes, classIndexs, probs = predict.predict(data, model)
+        classNames = labelEncoder.inverse_transform(classIndexs.type(torch.long).to("cpu"))
+        predict.export(boxes, classNames, probs, labelNames, outputpath="hw2_train_val/val1500/labelTxt_hbb_pred")
+        
+    classaps, mean_ap = evaluation.scan_map()
 
     # test_loss /= len(dataloader.dataset)
     logger.info("*** Test set - Average loss: {:.4f}".format(test_loss))

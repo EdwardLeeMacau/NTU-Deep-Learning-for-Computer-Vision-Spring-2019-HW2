@@ -10,7 +10,8 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 import os
 import time
-import argparse
+import random 
+# import argparse
 import pdb
 import logging
 import logging.config
@@ -53,8 +54,7 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
     batch_size  = output.shape[0]
     
     output = output.data
-    # print("Output.shape: {}".format(output.shape))
-    output = output.squeeze(0) # [batch_size, 7, 7, 26]
+    output = output.squeeze(0) # [7, 7, 26]
     # print("Output.shape: {}".format(output.shape))
     # print("Output: {}".format(output))
 
@@ -84,33 +84,23 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
                         
                     # Recover the base of xy as image_size
                     xy = torch.tensor([j, i], dtype=torch.float).cuda().unsqueeze(0) * cell_size
-                    # xy = torch.FloatTensor([j, i]).unsqueeze(0) * cell_size      # up-left of cell
-                        
                     # print("xy.shape: {}".format(xy.shape))
                     # print("xy: {}".format(xy))
-                    box[:2] = box[:2] * cell_size + xy                     # return cxcy relative to image
-                    box_xy  = torch.FloatTensor(box.size())                      # convert[cx, cy, w, h] to [x1, y1, x2, y2]
+
+                    box[:2] = box[:2] * cell_size + xy
+                    box_xy  = torch.zeros(box.size(), dtype=torch.float)
                     box_xy[:2] = box[:2] - 0.5 * box[2:]
                     box_xy[2:] = box[:2] + 0.5 * box[2:]                        
                     max_prob, classIndex = torch.max(output[i, j, 10:], 0)
-                    # print(classIndex)
-                    # print(output[i, j, 10 + classIndex])
-
+                    # print("classIndex: {}".format(classIndex))
                     # print("max_prob.shape: {}".format(max_prob.shape))
                     # print("max_prob: {}".format(max_prob))
 
-                    # print(contain_prob)
-                    # print(max_prob)
-                    
                     if float((contain_prob * max_prob).item()) > prob_min:
                         classIndex = classIndex.unsqueeze(0)
                         boxes.append(box_xy.view(1, 4))
                         classIndexs.append(classIndex)
                         probs.append((contain_prob * max_prob).view(1))
-
-    # print(boxes)
-    # print(probs)
-    # print(classIndexs)
 
     if len(boxes) == 0:
         boxes = torch.zeros((1,4))
@@ -121,9 +111,11 @@ def decode(output: torch.Tensor, prob_min=0.05, iou_threshold=0.5, grid_num=7, b
         probs = torch.cat(probs, 0) #(n,)
         classIndexs = torch.cat(classIndexs, 0) #(n,)
     
-    # print(boxes)
-    # print(probs)
-    # print(classIndexs)
+    if random.random() < 0.1:
+        print("*** Show random answer: ")
+        print("*** Boxes: {}".format(boxes))
+        print("*** Probs: {}".format(probs))
+        print("*** ClassIndex: {}".format(classIndexs))
 
     keep_index = nonMaximumSupression(boxes, probs, iou_threshold)
 
@@ -319,7 +311,8 @@ def main():
     if not os.path.exists("hw2_train_val/train15000/labelTxt_hbb_pred"):
         os.mkdir("hw2_train_val/train15000/labelTxt_hbb_pred")
 
-    for _, (data, target, labelName) in enumerate(testset_loader):
+    # Testset prediction
+    for data, target, labelName in testset_loader:
         data, target = data.to(device), target.to(device)
         
         output = model(data)
@@ -332,7 +325,9 @@ def main():
             export(boxes, classNames, probs, labelName[0])
             logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
 
-    for _, (data, _, labelName) in enumerate(trainset_loader):
+    # Trainset prediction
+    """
+    for data, _, labelName in trainset_loader:
         data = data.to(device)
 
         output = model(data)
@@ -344,7 +339,7 @@ def main():
         if cmdparse.args.export:
             export(boxes, classNames, probs, labelName[0], outputpath="hw2_train_val/train15000/labelTxt_hbb_pred")
             logger.info("Wrote file: {}".format(labelName[0].split("/")[-1]))
-
+    """
         
     end = time.time()
     logger.info("Used Time: {} min {:.0f} s".format((end - start) // 60, (end - start) % 60))
